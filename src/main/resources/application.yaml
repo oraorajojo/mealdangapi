@@ -2,7 +2,7 @@ spring:
   application:
     name: mealdangapi
   datasource:
-    url: jdbc:mysql://altaria.proxy.rlwy.net:23178/railway
+    url: jdbc:mysql://altaria.proxy.rlwy.net:23178/mealdang
     username: root
     password: ${DB_PASSWORD}
 
