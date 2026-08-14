@@ -36,8 +36,12 @@ public class RecommendLog {
     @Column(columnDefinition = "json")
     private String normalizedIngredientIds;
 
+    // 선택값 — 미세조정을 안 열면 null
     @Enumerated(EnumType.STRING)
     private MealTime mealTime;
+
+    @Enumerated(EnumType.STRING)
+    private AnnoyanceBand annoyanceBand;
 
     @Column(columnDefinition = "json")
     private String requestConditions;

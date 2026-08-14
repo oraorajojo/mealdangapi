@@ -32,7 +32,11 @@ public class RecommendService {
     private final RestClient fastApiClient;
 
     public RecommendResponse recommend(RecommendRequest request) {
-        List<FastApiCandidateRecipe> candidates = buildCandidates(request.mealTime());
+        AnnoyanceBand band = request.annoyanceBand() == null || request.annoyanceBand().isBlank()
+            ? null
+            : AnnoyanceBand.valueOf(request.annoyanceBand());
+
+        List<FastApiCandidateRecipe> candidates = buildCandidates(request.mealTime(), band);
 
         FastApiRecommendRequest fastApiRequest = new FastApiRecommendRequest(
             request.ingredientsText(),
@@ -49,7 +53,7 @@ public class RecommendService {
             .retrieve()
             .body(FastApiRecommendResponse.class);
 
-        RecommendLog savedLog = saveRecommendLog(request);
+        RecommendLog savedLog = saveRecommendLog(request, band);
         Map<String, RecipeResultDto> resultDtos = saveResultsAndBuildResponse(savedLog.getRecommendLogId(), fastApiResponse);
 
         return new RecommendResponse(
@@ -74,8 +78,12 @@ public class RecommendService {
 
     // ---------- 내부 로직 ----------
 
-    private List<FastApiCandidateRecipe> buildCandidates(String mealTime) {
-        List<RecipeCandidateRow> rows = recipeRepository.findActiveCandidates(mealTime);
+    private List<FastApiCandidateRecipe> buildCandidates(String mealTime, AnnoyanceBand band) {
+        List<RecipeCandidateRow> rows = recipeRepository.findActiveCandidates(
+            mealTime,
+            band == null ? null : band.minScore(),
+            band == null ? null : band.maxScore()
+        );
         List<Long> recipeIds = rows.stream().map(RecipeCandidateRow::getRecipeId).toList();
 
         Map<Long, List<String>> ingredientsByRecipe = new HashMap<>();
@@ -96,10 +104,13 @@ public class RecommendService {
             .toList();
     }
 
-    private RecommendLog saveRecommendLog(RecommendRequest request) {
+    private RecommendLog saveRecommendLog(RecommendRequest request, AnnoyanceBand band) {
         RecommendLog log = new RecommendLog();
         log.setInputIngredientsText(request.ingredientsText());
-        log.setMealTime(MealTime.valueOf(request.mealTime()));
+        if (request.mealTime() != null && !request.mealTime().isBlank()) {
+            log.setMealTime(MealTime.valueOf(request.mealTime()));
+        }
+        log.setAnnoyanceBand(band);
         log.setRequestConditions(JsonArrayUtil.toJsonArray(request.conditions()));
         return recommendLogRepository.save(log);
     }
