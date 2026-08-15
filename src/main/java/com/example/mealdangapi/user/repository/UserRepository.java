@@ -1,5 +1,6 @@
 package com.example.mealdangapi.user.repository;
 
+import com.example.mealdangapi.user.entity.SocialProvider;
 import com.example.mealdangapi.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -12,4 +13,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByNickname(String nickname);
 
     Optional<User> findByEmail(String email);
+
+    Optional<User> findBySocialProviderAndSocialId(
+            SocialProvider socialProvider,
+            String socialId
+    );
 }

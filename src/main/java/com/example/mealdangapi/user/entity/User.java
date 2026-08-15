@@ -82,11 +82,18 @@ public class User {
     private UserStatus status = UserStatus.ACTIVE;
 
     @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(
+            name = "created_at",
+            nullable = false,
+            updatable = false
+    )
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
+    @Column(
+            name = "updated_at",
+            nullable = false
+    )
     private LocalDateTime updatedAt;
 
     /**
@@ -97,6 +104,9 @@ public class User {
     @JoinColumn(name = "granted_by_user_id")
     private User grantedBy;
 
+    /**
+     * 회원 탈퇴 사유
+     */
     @Enumerated(EnumType.STRING)
     @Column(
             name = "withdrawal_reason_code",
@@ -104,9 +114,18 @@ public class User {
     )
     private WithdrawalReasonCode withdrawalReasonCode;
 
-    @Column(name = "withdrawal_etc_reason", length = 500)
+    /**
+     * 기타 탈퇴 사유 및 세부 내용
+     */
+    @Column(
+            name = "withdrawal_etc_reason",
+            length = 500
+    )
     private String withdrawalEtcReason;
 
+    /**
+     * 회원 탈퇴 일시
+     */
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 
@@ -121,17 +140,37 @@ public class User {
     ) {
         this.email = email;
         this.passwordHash = passwordHash;
+
         this.socialProvider =
                 socialProvider != null
                         ? socialProvider
                         : SocialProvider.NONE;
+
         this.socialId = socialId;
         this.nickname = nickname;
+
         this.cookingLevel =
                 cookingLevel != null
                         ? cookingLevel
                         : CookingLevel.BEGINNER;
+
         this.role = UserRole.USER;
         this.status = UserStatus.ACTIVE;
+    }
+
+    /**
+     * 회원 탈퇴 처리
+     *
+     * 실제 DB 행을 삭제하지 않고
+     * 탈퇴 상태와 탈퇴 정보를 저장한다.
+     */
+    public void withdraw(
+            WithdrawalReasonCode reasonCode,
+            String etcReason
+    ) {
+        this.status = UserStatus.WITHDRAWN;
+        this.withdrawalReasonCode = reasonCode;
+        this.withdrawalEtcReason = etcReason;
+        this.withdrawnAt = LocalDateTime.now();
     }
 }
