@@ -1,6 +1,7 @@
 spring:
   application:
     name: mealdangapi
+
   datasource:
     url: jdbc:mysql://altaria.proxy.rlwy.net:23178/mealdang
     username: root
@@ -8,3 +9,14 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+fastapi:
+  base-url: http://localhost:8000
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 3600000
+
+kakao:
+  client-id: ${KAKAO_CLIENT_ID}
+  redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/api/users/kakao/callback}
