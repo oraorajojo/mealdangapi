@@ -43,7 +43,7 @@ public class RecipeIngredient {
     private boolean essential;
 
     @Column(name = "sort_order", nullable = false)
-    private Integer sortOrder;
+    private Short sortOrder;
 
     public static RecipeIngredient create(
             Recipe recipe,
@@ -63,7 +63,7 @@ public class RecipeIngredient {
         recipeIngredient.amountValue = amountValue;
         recipeIngredient.amountUnit = amountUnit;
         recipeIngredient.essential = essential;
-        recipeIngredient.sortOrder = sortOrder;
+        recipeIngredient.sortOrder = (short) sortOrder;
         return recipeIngredient;
     }
 }

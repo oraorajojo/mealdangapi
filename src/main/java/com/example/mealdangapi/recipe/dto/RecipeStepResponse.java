@@ -8,7 +8,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public class RecipeStepResponse {
 
-    private Integer stepNo;
+    private Short stepNo;
     private String content;
     private String imageUrl;
 

@@ -22,7 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "recipes" )
+@Table(name = "recipes")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Recipe {
@@ -46,19 +46,35 @@ public class Recipe {
     @Column(name = "summary", length = 1000)
     private String summary;
 
-    @Column(name = "cooking_time_min", nullable = false)
+    @Column(
+            name = "cooking_time_min",
+            nullable = false,
+            columnDefinition = "SMALLINT UNSIGNED"
+    )
     private Integer cookingTimeMin;
 
-    @Column(name = "base_servings", nullable = false)
+    @Column(
+            name = "base_servings",
+            nullable = false,
+            columnDefinition = "SMALLINT UNSIGNED"
+    )
     private Integer baseServings;
 
     @Column(name = "annoyance_score", nullable = false, precision = 3, scale = 2)
     private BigDecimal annoyanceScore;
 
-    @Column(name = "knife_level", nullable = false)
+    @Column(
+            name = "knife_level",
+            nullable = false,
+            columnDefinition = "TINYINT UNSIGNED"
+    )
     private Integer knifeLevel;
 
-    @Column(name = "dish_count", nullable = false)
+    @Column(
+            name = "dish_count",
+            nullable = false,
+            columnDefinition = "TINYINT UNSIGNED"
+    )
     private Integer dishCount;
 
     @Column(name = "image_url", length = 1000)

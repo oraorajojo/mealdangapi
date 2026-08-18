@@ -15,7 +15,7 @@ public class RecipeIngredientResponse {
     private BigDecimal amountValue;
     private String amountUnit;
     private boolean essential;
-    private Integer sortOrder;
+    private Short sortOrder;
 
     public static RecipeIngredientResponse from(
             RecipeIngredient recipeIngredient

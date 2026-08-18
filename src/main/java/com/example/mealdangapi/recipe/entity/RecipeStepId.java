@@ -19,17 +19,17 @@ public class RecipeStepId implements Serializable {
     private Long recipeId;
 
     @Column(name = "step_no")
-    private Integer stepNo;
+    private Short stepNo;
 
-    private RecipeStepId(Long recipeId, Integer stepNo) {
+    private RecipeStepId(Long recipeId, Short stepNo) {
         this.recipeId = recipeId;
         this.stepNo = stepNo;
     }
 
     public static RecipeStepId of(
             Long recipeId,
-            Integer stepNo
+            int stepNo
     ) {
-        return new RecipeStepId(recipeId, stepNo);
+        return new RecipeStepId(recipeId, (short) stepNo);
     }
 }
