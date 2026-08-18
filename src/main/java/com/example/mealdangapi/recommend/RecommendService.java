@@ -16,9 +16,13 @@ import com.example.mealdangapi.recommend.dto.RecommendRequest;
 import com.example.mealdangapi.recommend.dto.RecommendResponse;
 import com.example.mealdangapi.recommend.dto.SelectRequest;
 import com.example.mealdangapi.recommend.dto.SelectResponse;
+import com.example.mealdangapi.user.entity.User;
+import com.example.mealdangapi.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -42,9 +46,10 @@ public class RecommendService {
     private final RecommendLogRepository recommendLogRepository;
     private final RecommendLogResultRepository recommendLogResultRepository;
     private final ChefSelectionRepository chefSelectionRepository;
+    private final UserRepository userRepository;
     private final RestClient fastApiClient;
 
-    public RecommendResponse recommend(RecommendRequest request) {
+    public RecommendResponse recommend(Authentication authentication, RecommendRequest request) {
         MealTime mealTime = parseMealTime(request.mealTime());
         AnnoyanceBand band = parseAnnoyanceBand(request.annoyanceBand());
 
@@ -65,7 +70,7 @@ public class RecommendService {
             .retrieve()
             .body(FastApiRecommendResponse.class);
 
-        RecommendLog savedLog = saveRecommendLog(request, mealTime, band);
+        RecommendLog savedLog = saveRecommendLog(request, mealTime, band, resolveUserId(authentication));
         Map<String, RecipeResultDto> resultDtos = saveResultsAndBuildResponse(savedLog.getRecommendLogId(), fastApiResponse);
 
         return new RecommendResponse(
@@ -76,14 +81,32 @@ public class RecommendService {
         );
     }
 
-    public SelectResponse select(Long recommendLogId, SelectRequest request) {
+    public SelectResponse select(Long recommendLogId, String userEmail, SelectRequest request) {
+        Long userId = userRepository.findByEmail(userEmail)
+            .map(User::getUserId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자를 찾을 수 없습니다."));
+
+        RecommendLog log = recommendLogRepository.findById(recommendLogId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "추천 로그를 찾을 수 없습니다."));
+
+        // 비회원(user_id NULL) 추천 로그는 소유자가 없어 로그인 후에도 선택 대상이 될 수 없다.
+        // (비회원은 추천·결과 열람까지만 가능 — 선택하려면 로그인 후 다시 추천받아야 함)
+        if (!userId.equals(log.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "본인의 추천 로그가 아닙니다.");
+        }
+
+        if (!recommendLogResultRepository.existsByRecommendLogIdAndRecipeId(recommendLogId, request.recipeId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 추천 로그의 후보 레시피가 아닙니다.");
+        }
+
         if (chefSelectionRepository.existsByRecommendLogId(recommendLogId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 선택된 추천 로그입니다.");
         }
+
         ChefSelection selection = new ChefSelection();
         selection.setRecommendLogId(recommendLogId);
         selection.setRecipeId(request.recipeId());
-        selection.setUserId(request.userId());
+        selection.setUserId(userId);
         ChefSelection saved = chefSelectionRepository.save(selection);
         return new SelectResponse(saved.getSelectionId());
     }
@@ -147,8 +170,21 @@ public class RecommendService {
         return (root, query, cb) -> cb.lessThan(root.get("annoyanceScore"), maxExclusive);
     }
 
-    private RecommendLog saveRecommendLog(RecommendRequest request, MealTime mealTime, AnnoyanceBand band) {
+    // 인증 필터는 토큰이 있으면 permitAll 엔드포인트에서도 인증 정보를 채워준다.
+    // 로그인 상태로 요청했다면 recommend_logs.user_id를 남겨서, 이후 select에서
+    // 본인 로그인지 검증할 수 있게 한다 (비로그인이면 null로 남아 select가 불가능해짐 - 의도된 동작).
+    private Long resolveUserId(Authentication authentication) {
+        if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+        return userRepository.findByEmail(authentication.getName())
+            .map(User::getUserId)
+            .orElse(null);
+    }
+
+    private RecommendLog saveRecommendLog(RecommendRequest request, MealTime mealTime, AnnoyanceBand band, Long userId) {
         RecommendLog log = new RecommendLog();
+        log.setUserId(userId);
         log.setInputIngredientsText(request.ingredientsText());
         log.setMealTime(mealTime);
         log.setAnnoyanceBand(band);
