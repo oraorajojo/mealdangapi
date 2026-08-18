@@ -1,5 +1,6 @@
 package com.example.mealdangapi.recommend;
 
+import com.example.mealdangapi.recipe.entity.ChefCode;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;

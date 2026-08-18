@@ -1,5 +1,7 @@
 package com.example.mealdangapi.recommend;
 
+import com.example.mealdangapi.recipe.entity.ChefCode;
+
 import java.io.Serializable;
 import java.util.Objects;
 

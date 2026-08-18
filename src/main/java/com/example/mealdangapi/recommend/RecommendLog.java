@@ -1,5 +1,7 @@
 package com.example.mealdangapi.recommend;
 
+import com.example.mealdangapi.recipe.entity.AnnoyanceBand;
+import com.example.mealdangapi.recipe.entity.MealTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
