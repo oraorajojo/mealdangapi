@@ -2,12 +2,17 @@ package com.example.mealdangapi.recommend;
 
 import com.example.mealdangapi.recipe.entity.AnnoyanceBand;
 import com.example.mealdangapi.recipe.entity.ChefCode;
+import com.example.mealdangapi.recipe.entity.Ingredient;
+import com.example.mealdangapi.recipe.entity.IngredientAlias;
 import com.example.mealdangapi.recipe.entity.MealTime;
 import com.example.mealdangapi.recipe.entity.Recipe;
+import com.example.mealdangapi.recipe.repository.IngredientAliasRepository;
+import com.example.mealdangapi.recipe.repository.IngredientRepository;
 import com.example.mealdangapi.recipe.repository.RecipeIngredientRepository;
 import com.example.mealdangapi.recipe.repository.RecipeRepository;
 import com.example.mealdangapi.recipe.repository.RecipeSpecification;
 import com.example.mealdangapi.recommend.dto.FastApiCandidateRecipe;
+import com.example.mealdangapi.recommend.dto.FastApiIngredientDictionaryEntry;
 import com.example.mealdangapi.recommend.dto.FastApiRecipeResult;
 import com.example.mealdangapi.recommend.dto.FastApiRecommendRequest;
 import com.example.mealdangapi.recommend.dto.FastApiRecommendResponse;
@@ -43,6 +48,8 @@ public class RecommendService {
     // 직접 조합해 mealTime/annoyanceBand를 선택적으로 적용한다.
     private final RecipeRepository recipeRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
+    private final IngredientRepository ingredientRepository;
+    private final IngredientAliasRepository ingredientAliasRepository;
     private final RecommendLogRepository recommendLogRepository;
     private final RecommendLogResultRepository recommendLogResultRepository;
     private final ChefSelectionRepository chefSelectionRepository;
@@ -61,7 +68,8 @@ public class RecommendService {
             request.conditions() == null ? List.of() : request.conditions(),
             request.excludeIngredients() == null ? List.of() : request.excludeIngredients(),
             request.excludeRecipeIds() == null ? Map.of() : request.excludeRecipeIds(),
-            candidates
+            candidates,
+            buildIngredientDictionary()
         );
 
         FastApiRecommendResponse fastApiResponse = fastApiClient.post()
@@ -70,7 +78,7 @@ public class RecommendService {
             .retrieve()
             .body(FastApiRecommendResponse.class);
 
-        RecommendLog savedLog = saveRecommendLog(request, mealTime, band, resolveUserId(authentication));
+        RecommendLog savedLog = saveRecommendLog(request, mealTime, band, resolveUserId(authentication), fastApiResponse.normalizedIngredientIds());
         Map<String, RecipeResultDto> resultDtos = saveResultsAndBuildResponse(savedLog.getRecommendLogId(), fastApiResponse);
 
         return new RecommendResponse(
@@ -164,6 +172,27 @@ public class RecommendService {
         return candidates;
     }
 
+    // FastAPI는 DB에 접근하지 않으므로, 재료 인식에 쓸 사전(표준명 + 별칭)을 매 요청마다 통째로 넘긴다.
+    // 표준명은 term==canonicalName인 자기 자신 항목으로, 별칭은 term=별칭 / canonicalName=연결된 표준명으로 넣는다.
+    private List<FastApiIngredientDictionaryEntry> buildIngredientDictionary() {
+        List<FastApiIngredientDictionaryEntry> dictionary = new java.util.ArrayList<>();
+
+        for (Ingredient ingredient : ingredientRepository.findAll()) {
+            dictionary.add(new FastApiIngredientDictionaryEntry(
+                ingredient.getName(), ingredient.getIngredientId(), ingredient.getName()
+            ));
+        }
+
+        for (IngredientAlias alias : ingredientAliasRepository.findAllWithIngredient()) {
+            Ingredient ingredient = alias.getIngredient();
+            dictionary.add(new FastApiIngredientDictionaryEntry(
+                alias.getAlias(), ingredient.getIngredientId(), ingredient.getName()
+            ));
+        }
+
+        return dictionary;
+    }
+
     // RecipeSpecification에는 상한을 "이하(<=)"로 거는 것만 있어서, annoyanceBand의
     // 배타적 상한(maxExclusive, 예: MID는 4.00 미만)을 그대로 반영하기 위해 여기서만 쓰는 조건.
     private Specification<Recipe> annoyanceScoreLessThan(BigDecimal maxExclusive) {
@@ -182,13 +211,14 @@ public class RecommendService {
             .orElse(null);
     }
 
-    private RecommendLog saveRecommendLog(RecommendRequest request, MealTime mealTime, AnnoyanceBand band, Long userId) {
+    private RecommendLog saveRecommendLog(RecommendRequest request, MealTime mealTime, AnnoyanceBand band, Long userId, List<Long> normalizedIngredientIds) {
         RecommendLog log = new RecommendLog();
         log.setUserId(userId);
         log.setInputIngredientsText(request.ingredientsText());
         log.setMealTime(mealTime);
         log.setAnnoyanceBand(band);
         log.setRequestConditions(JsonArrayUtil.toJsonArray(request.conditions()));
+        log.setNormalizedIngredientIds(JsonArrayUtil.toJsonArrayOfNumbers(normalizedIngredientIds));
         return recommendLogRepository.save(log);
     }
 
