@@ -42,8 +42,12 @@ public class RecipeIngredient {
     @Column(name = "is_essential", nullable = false)
     private boolean essential;
 
-    @Column(name = "sort_order", nullable = false)
-    private Short sortOrder;
+    @Column(
+            name = "sort_order",
+            nullable = false,
+            columnDefinition = "SMALLINT UNSIGNED"
+    )
+    private Integer sortOrder;
 
     public static RecipeIngredient create(
             Recipe recipe,
@@ -63,7 +67,7 @@ public class RecipeIngredient {
         recipeIngredient.amountValue = amountValue;
         recipeIngredient.amountUnit = amountUnit;
         recipeIngredient.essential = essential;
-        recipeIngredient.sortOrder = (short) sortOrder;
+        recipeIngredient.sortOrder = sortOrder;
         return recipeIngredient;
     }
 }
