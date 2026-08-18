@@ -1,6 +1,7 @@
 package com.example.mealdangapi.recommend;
 
 import com.example.mealdangapi.recipe.entity.ChefCode;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -29,7 +30,10 @@ public class RecommendLogResult {
     private ChefCode chefCode;
 
     private Long recipeId;
+
+    @Column(name = "recommendation_rank", nullable = false, columnDefinition = "TINYINT UNSIGNED")
     private Integer recommendationRank;
+
     private BigDecimal matchScore;
     private LocalDateTime createdAt;
 
