@@ -34,7 +34,6 @@ public class RecommendLog {
 
     // Spring Boot 4(Jackson 3) + Hibernate의 JSON FormatMapper 자동 매핑이
     // 현재 지원되지 않아, JSON 문자열을 직접 만들어 저장한다 (Recommend JsonUtil 참고).
-    // TODO: FastAPI가 재료 id를 돌려주게 되면 이 필드도 채운다.
     @Column(columnDefinition = "json")
     private String normalizedIngredientIds;
 

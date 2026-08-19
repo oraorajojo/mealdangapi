@@ -12,6 +12,7 @@ public record FastApiRecommendRequest(
     List<String> conditions,
     @JsonProperty("exclude_ingredients") List<String> excludeIngredients,
     @JsonProperty("exclude_recipe_ids") Map<String, List<Long>> excludeRecipeIds,
-    @JsonProperty("candidate_recipes") List<FastApiCandidateRecipe> candidateRecipes
+    @JsonProperty("candidate_recipes") List<FastApiCandidateRecipe> candidateRecipes,
+    @JsonProperty("ingredient_dictionary") List<FastApiIngredientDictionaryEntry> ingredientDictionary
 ) {
 }
