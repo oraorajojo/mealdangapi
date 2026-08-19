@@ -25,4 +25,18 @@ final class JsonArrayUtil {
         }
         return sb.append("]").toString();
     }
+
+    static String toJsonArrayOfNumbers(List<Long> items) {
+        if (items == null || items.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(items.get(i));
+        }
+        return sb.append("]").toString();
+    }
 }

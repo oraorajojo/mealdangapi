@@ -1,5 +1,6 @@
 package com.example.mealdangapi.recipe.service;
 
+import com.example.mealdangapi.board.api.BoardPostCommandApi;
 import com.example.mealdangapi.recipe.dto.RecipeCreateRequest;
 import com.example.mealdangapi.recipe.dto.RecipeCreateResponse;
 import com.example.mealdangapi.recipe.dto.RecipeIngredientCreateRequest;
@@ -44,6 +45,7 @@ public class RecipeCommandService {
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final RecipeStepRepository recipeStepRepository;
     private final RecipeMealRepository recipeMealRepository;
+    private final BoardPostCommandApi boardPostCommandApi;
 
     @Transactional
     public RecipeCreateResponse createRecipe(
@@ -72,6 +74,7 @@ public class RecipeCommandService {
 
         Recipe savedRecipe = recipeRepository.save(recipe);
         saveChildData(savedRecipe, request, ingredientsById);
+        createBoardPostForUserRecipe(savedRecipe, author);
 
         return new RecipeCreateResponse(
                 savedRecipe.getRecipeId(),
@@ -123,6 +126,20 @@ public class RecipeCommandService {
     ) {
         Recipe recipe = findOwnedActiveUserRecipe(recipeId, userEmail);
         recipe.deactivate();
+    }
+
+    private void createBoardPostForUserRecipe(
+            Recipe recipe,
+            User author
+    ) {
+        if (recipe.getSourceType() != RecipeSourceType.USER_SUBMISSION) {
+            return;
+        }
+
+        boardPostCommandApi.createBoardPost(
+                recipe.getRecipeId(),
+                author.getUserId()
+        );
     }
 
     private User findUserByEmail(String userEmail) {

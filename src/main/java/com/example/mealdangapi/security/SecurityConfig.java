@@ -41,8 +41,13 @@ public class SecurityConfig {
                                 "/api/users/kakao/callback"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/recommend"
+                        ).permitAll()
+                        .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/recipes/**"
+                                "/api/recipes/**",
+                                "/api/board/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

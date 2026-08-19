@@ -1,7 +1,10 @@
 package com.example.mealdangapi.board.repository;
 
+import com.example.mealdangapi.board.dto.response.BoardPostListRow;
 import com.example.mealdangapi.board.entity.BoardPost;
 import com.example.mealdangapi.board.entity.PostStatus;
+import com.example.mealdangapi.recipe.entity.ChefCode;
+import com.example.mealdangapi.recipe.entity.MealTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -9,69 +12,109 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
  * 게시글 저장소 (BOARD_POSTS) — 담당: 종선
- *
- * JpaRepository<엔티티, 식별자타입>을 상속하면
- * save(), findById(), delete(), count() 같은 기본 메서드가 자동으로 생긴다.
- * 여기에는 그걸로 안 되는 것만 추가로 정의한다.
- *
- * ※ 셰프/시간대 필터, 리뷰 수 집계는 recipes·recipe_meals·reviews 조인이 필요해서
- *   치연 레시피 기능이 붙은 뒤에 추가한다. 지금은 board_posts 단독으로 되는 것만.
  */
 public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
 
     // ═══════════════════════════════════════════════════════════
-    //  조회
+    //  게시판 목록 — 레시피 조인 + 필터
     // ═══════════════════════════════════════════════════════════
 
     /**
-     * 게시판 목록 — 미식 연구소 화면.
+     * 미식 연구소 목록 조회. 셰프·시간대 필터를 지원한다.
      *
-     * 메서드 이름만으로 쿼리가 만들어진다(쿼리 메서드).
-     * findAll + By + Status  →  WHERE status = ?
-     * 정렬·페이징은 Pageable로 넘긴다:
-     *   PageRequest.of(0, 12, Sort.by(Sort.Direction.DESC, "createdAt"))
+     * ★ 왜 조인이 필요한가
+     *   와이어프레임의 필터(한식/중식/양식/기타, 아침/점심/저녁/야식)와
+     *   카드에 표시할 대표이미지·조리시간·귀찮음지수는 모두 recipes 쪽에 있다.
+     *   board_posts에는 이 값들이 없어서 조인 없이는 화면을 구성할 수 없다.
      *
-     * status=PUBLISHED만 조회하는 게 핵심이다.
-     * HIDDEN(신고 인정)·DELETED는 일반 사용자에게 보이면 안 된다.
+     * ★ FROM BoardPost p, Recipe r WHERE p.recipeId = r.recipeId
+     *   BoardPost가 Recipe를 @ManyToOne으로 매핑하지 않고 Long FK로만 들고 있어서
+     *   (치연 브랜치와의 병합 충돌을 피하려는 의도적 설계)
+     *   JOIN 문법 대신 이렇게 조건으로 연결한다. 결과는 INNER JOIN과 같다.
      *
-     * 인덱스: idx_board_posts_status_created (status, created_at)가 그대로 탄다.
+     * ★ r.active = true 조건
+     *   신고 인정으로 비활성화된 레시피는 게시글도 HIDDEN이 되지만,
+     *   레시피만 따로 비활성화되는 경로(작성자가 직접 비활성화)도 있어
+     *   두 조건을 모두 확인해야 한다.
+     *
+     * ★ (:chefCode IS NULL OR ...) 패턴
+     *   파라미터가 null이면 그 조건을 무시한다. 필터 조합마다 메서드를
+     *   따로 만들지 않아도 되게 하는 방식이다.
+     *
+     * ★ 시간대는 EXISTS 서브쿼리를 쓴다
+     *   recipe_meals는 레시피 1개당 여러 행(아침+저녁 등)이라
+     *   직접 조인하면 같은 게시글이 여러 번 나온다(중복 행).
+     *   EXISTS는 "조건에 맞는 행이 하나라도 있는가"만 보므로 중복이 생기지 않는다.
+     *
+     * ★ countQuery를 직접 지정한 이유
+     *   생성자 표현식(new ...)이 들어간 쿼리는 Spring Data가 count 쿼리를
+     *   자동으로 만들어내지 못한다. 페이징을 쓰려면 반드시 따로 적어줘야 한다.
      */
-    Page<BoardPost> findAllByStatus(PostStatus status, Pageable pageable);
+    @Query(
+            value = "SELECT new com.example.mealdangapi.board.dto.response.BoardPostListRow("
+                    + "  p.postId, p.recipeId, p.userId, p.title, "
+                    + "  p.viewCount, p.likeCount, p.createdAt, "
+                    + "  r.name, r.chefCode, r.imageUrl, r.cookingTimeMin, r.annoyanceScore) "
+                    + "FROM BoardPost p, Recipe r "
+                    + "WHERE p.recipeId = r.recipeId "
+                    + "  AND p.status = :status "
+                    + "  AND r.active = true "
+                    + "  AND (:chefCode IS NULL OR r.chefCode = :chefCode) "
+                    + "  AND (:mealTime IS NULL OR EXISTS ("
+                    + "        SELECT 1 FROM RecipeMeal rm "
+                    + "        WHERE rm.id.recipeId = r.recipeId "
+                    + "          AND rm.id.mealTime = :mealTime)) ",
+            countQuery = "SELECT COUNT(p) "
+                    + "FROM BoardPost p, Recipe r "
+                    + "WHERE p.recipeId = r.recipeId "
+                    + "  AND p.status = :status "
+                    + "  AND r.active = true "
+                    + "  AND (:chefCode IS NULL OR r.chefCode = :chefCode) "
+                    + "  AND (:mealTime IS NULL OR EXISTS ("
+                    + "        SELECT 1 FROM RecipeMeal rm "
+                    + "        WHERE rm.id.recipeId = r.recipeId "
+                    + "          AND rm.id.mealTime = :mealTime)) "
+    )
+    Page<BoardPostListRow> findBoardList(
+            @Param("status") PostStatus status,
+            @Param("chefCode") ChefCode chefCode,
+            @Param("mealTime") MealTime mealTime,
+            Pageable pageable
+    );
 
     /**
-     * 게시글 단건 조회 — 노출 가능한 것만.
+     * 여러 레시피의 추천 시간대를 한 번에 조회. (카드 배지용)
      *
-     * findById()를 쓰면 HIDDEN 글도 그대로 반환돼서 서비스에서 매번 상태를 확인해야 한다.
-     * 조회 단계에서 걸러두면 그 실수를 막을 수 있다.
+     * 게시글마다 개별 조회하면 N+1이 발생하므로 IN 절로 묶는다.
+     *   [0] = recipeId (Long)
+     *   [1] = mealTime (MealTime)
+     * 레시피 1개가 여러 시간대를 가지므로 같은 recipeId가 여러 번 나온다.
      */
+    @Query("SELECT rm.id.recipeId, rm.id.mealTime FROM RecipeMeal rm "
+            + "WHERE rm.id.recipeId IN :recipeIds")
+    List<Object[]> findMealTimesByRecipeIds(@Param("recipeIds") List<Long> recipeIds);
+
+    // ═══════════════════════════════════════════════════════════
+    //  단건 조회
+    // ═══════════════════════════════════════════════════════════
+
+    /** 노출 가능한 게시글만 조회. HIDDEN·DELETED는 걸러진다 */
     Optional<BoardPost> findByPostIdAndStatus(Long postId, PostStatus status);
 
-    /**
-     * 레시피에 연결된 게시글 조회.
-     *
-     * 쓰이는 곳:
-     *   - 레시피 상세 화면에서 신고 버튼에 넘길 postId를 찾을 때
-     *   - createBoardPost() 중복 생성 방지 확인
-     *
-     * recipe_id에 UNIQUE가 걸려 있어 결과는 0개 아니면 1개다.
-     */
+    /** 레시피에 연결된 게시글. recipe_id가 UNIQUE라 결과는 0 또는 1개 */
     Optional<BoardPost> findByRecipeId(Long recipeId);
 
-    /** 레시피에 이미 게시글이 있는지 (createBoardPost 중복 방지) */
+    /** createBoardPost 중복 생성 방지 */
     boolean existsByRecipeId(Long recipeId);
 
     /**
-     * 관리자 페이지 — 신고 누적 게시글 목록.
-     *
-     * 확정 사항: 신고 10건 누적 시 관리자 검토 대상이 된다.
+     * 관리자 페이지 — 신고 누적 게시글.
      * 임계값 10은 하드코딩하지 않고 파라미터로 받는다.
-     * (application.yml에 mealdang.report.threshold: 10 으로 빼두면 조정이 쉽다)
-     *
-     * 인덱스: idx_board_posts_report (report_count, status)
      */
     Page<BoardPost> findAllByReportCountGreaterThanEqualAndStatus(
             int threshold, PostStatus status, Pageable pageable);
@@ -80,57 +123,33 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
     //  카운트 갱신 — 원자적 UPDATE
     // ═══════════════════════════════════════════════════════════
     //
-    // ★ 왜 엔티티 setter를 안 쓰고 이렇게 하는가
+    // ★ 엔티티 setter를 쓰지 않는 이유
+    //   "읽고 → 더하고 → 쓰기" 3단계로 하면 동시 요청 시
+    //   둘 다 같은 값을 읽고 같은 값을 써서 한 번만 반영된다(lost update).
+    //   DB에게 "현재값 + 1"을 시키면 행 잠금으로 순차 처리된다.
     //
-    //   엔티티로 하면 "읽고 → 더하고 → 쓰기" 3단계가 된다.
-    //     post.setLikeCount(post.getLikeCount() + 1);
-    //   두 사람이 동시에 좋아요를 누르면 둘 다 5를 읽고 둘 다 6을 쓴다.
-    //   실제로는 2번 눌렸는데 결과는 6. 이걸 lost update라고 한다.
-    //
-    //   아래처럼 DB에게 "현재값 + 1"을 시키면 DB가 행 잠금을 걸고 순서대로 처리한다.
-    //   설계정의서 §12 검수 항목 "좋아요·신고 동시 요청 시 카운트 불일치 없는지"가 이것.
-    //
-    // ★ @Modifying 필수
-    //   이게 없으면 Spring Data가 SELECT로 취급해서 실행 시점에 예외가 난다.
-    //   clearAutomatically = true → 실행 후 영속성 컨텍스트를 비운다.
-    //     안 그러면 같은 트랜잭션에서 다시 조회했을 때 캐시된 옛날 값이 나온다.
-    //
-    // ★ @Transactional은 여기 붙이지 않는다
-    //   호출하는 서비스 메서드의 트랜잭션에 참여해야 하기 때문.
-    //   좋아요 INSERT와 카운트 증가가 같은 트랜잭션이어야 한다.
+    // ★ @Modifying(clearAutomatically = true)
+    //   실행 후 영속성 컨텍스트를 비운다. 안 그러면 같은 트랜잭션에서
+    //   다시 조회했을 때 캐시된 갱신 전 값이 나온다.
 
-    /**
-     * 조회수 +1.
-     *
-     * ※ 알아둘 것: 이 UPDATE는 Hibernate를 거치지 않으므로
-     *   DB의 ON UPDATE CURRENT_TIMESTAMP가 발동해 updated_at도 함께 갱신된다.
-     *   즉 "조회만 해도 수정일시가 바뀐다". 정렬은 created_at 기준이라 지금은 무해하다.
-     */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE BoardPost p SET p.viewCount = p.viewCount + 1 WHERE p.postId = :postId")
     int increaseViewCount(@Param("postId") Long postId);
 
-    /** 좋아요 +1. POST_LIKES INSERT와 같은 트랜잭션에서 호출할 것 */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE BoardPost p SET p.likeCount = p.likeCount + 1 WHERE p.postId = :postId")
     int increaseLikeCount(@Param("postId") Long postId);
 
     /**
-     * 좋아요 -1.
-     *
-     * ★ WHERE에 likeCount > 0 조건이 반드시 필요하다.
-     *   like_count가 INT UNSIGNED라서 0에서 1을 빼면 음수가 되는데,
-     *   MySQL strict mode에서는 그 순간 에러가 나며 트랜잭션이 통째로 롤백된다.
-     *   조건을 걸면 0일 때는 UPDATE 대상이 없어 반환값 0으로 조용히 넘어간다.
-     *
-     * @return 갱신된 행 수. 0이면 이미 0이었다는 뜻
+     * ★ WHERE likeCount > 0 조건 필수.
+     *   like_count가 INT UNSIGNED라 0에서 1을 빼면 MySQL strict mode에서
+     *   예외가 발생하며 트랜잭션 전체가 롤백된다.
      */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE BoardPost p SET p.likeCount = p.likeCount - 1 "
             + "WHERE p.postId = :postId AND p.likeCount > 0")
     int decreaseLikeCount(@Param("postId") Long postId);
 
-    /** 신고 +1. POST_REPORTS INSERT와 같은 트랜잭션에서 호출할 것 */
     @Modifying(clearAutomatically = true)
     @Query("UPDATE BoardPost p SET p.reportCount = p.reportCount + 1 WHERE p.postId = :postId")
     int increaseReportCount(@Param("postId") Long postId);
