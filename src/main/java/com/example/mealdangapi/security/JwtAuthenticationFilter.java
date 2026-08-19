@@ -1,5 +1,7 @@
 package com.example.mealdangapi.security;
 
+import com.example.mealdangapi.admin.service.AdminUserService;
+import com.example.mealdangapi.user.security.CustomUserDetailsService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,7 +13,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import com.example.mealdangapi.user.security.CustomUserDetailsService;
 
 import java.io.IOException;
 
@@ -21,6 +22,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService customUserDetailsService;
+    private final AdminUserService adminUserService;
 
     @Override
     protected void doFilterInternal(
@@ -28,38 +30,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+        String authorizationHeader = request.getHeader("Authorization");
 
-        // Authorization 헤더 가져오기
-        String authorizationHeader =
-                request.getHeader("Authorization");
-
-        // JWT가 없는 경우
         if (authorizationHeader == null
                 || !authorizationHeader.startsWith("Bearer ")) {
-
             filterChain.doFilter(request, response);
             return;
         }
 
-        // "Bearer " 제거
-        String token =
-                authorizationHeader.substring(7);
+        String token = authorizationHeader.substring(7);
 
         try {
-
-            // JWT 유효성 검증
             if (jwtTokenProvider.validateToken(token)) {
+                String email = jwtTokenProvider.getEmail(token);
 
-                // JWT에서 이메일 추출
-                String email =
-                        jwtTokenProvider.getEmail(token);
+                if (!adminUserService.isAccessAllowed(email)) {
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
-                // 사용자 정보 조회
-                UserDetails userDetails =
-                        customUserDetailsService
-                                .loadUserByUsername(email);
+                UserDetails userDetails = customUserDetailsService
+                        .loadUserByUsername(email);
 
-                // 인증 객체 생성
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
                                 userDetails,
@@ -67,25 +60,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                 userDetails.getAuthorities()
                         );
 
-                // 요청 정보 등록
                 authentication.setDetails(
                         new WebAuthenticationDetailsSource()
                                 .buildDetails(request)
                 );
 
-                // SecurityContext에 인증 정보 저장
-                SecurityContextHolder
-                        .getContext()
-                        .setAuthentication(authentication);
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             }
-
         } catch (Exception e) {
-
-            // JWT가 잘못된 경우 인증하지 않고 다음 필터로 진행
             SecurityContextHolder.clearContext();
         }
 
-        // 다음 필터 실행
         filterChain.doFilter(request, response);
     }
 }
