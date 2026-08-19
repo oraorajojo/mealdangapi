@@ -13,6 +13,7 @@ import java.util.List;
 public class RecipeDetailResponse {
 
     private Long recipeId;
+    private Long postId;
     private String chefCode;
     private String name;
     private String summary;
@@ -29,12 +30,14 @@ public class RecipeDetailResponse {
 
     public static RecipeDetailResponse of(
             Recipe recipe,
+            Long postId,
             List<MealTime> mealTimes,
             List<RecipeIngredientResponse> ingredients,
             List<RecipeStepResponse> steps
     ) {
         return new RecipeDetailResponse(
                 recipe.getRecipeId(),
+                postId,
                 recipe.getChefCode().name(),
                 recipe.getName(),
                 recipe.getSummary(),

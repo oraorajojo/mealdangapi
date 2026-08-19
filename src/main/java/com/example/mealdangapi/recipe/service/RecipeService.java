@@ -1,5 +1,6 @@
 package com.example.mealdangapi.recipe.service;
 
+import com.example.mealdangapi.board.repository.BoardPostRepository;
 import com.example.mealdangapi.recipe.dto.RecipeDetailResponse;
 import com.example.mealdangapi.recipe.dto.RecipeIngredientResponse;
 import com.example.mealdangapi.recipe.dto.RecipeListItemResponse;
@@ -40,6 +41,7 @@ public class RecipeService {
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final RecipeStepRepository recipeStepRepository;
     private final RecipeMealRepository recipeMealRepository;
+    private final BoardPostRepository boardPostRepository;
 
     public RecipeDetailResponse getRecipeDetail(Long recipeId) {
         Recipe recipe = recipeRepository
@@ -48,6 +50,11 @@ public class RecipeService {
                         HttpStatus.NOT_FOUND,
                         "활성 레시피를 찾을 수 없습니다."
                 ));
+
+        Long postId = boardPostRepository
+                .findByRecipeId(recipeId)
+                .map(boardPost -> boardPost.getPostId())
+                .orElse(null);
 
         List<MealTime> mealTimes = recipeMealRepository
                 .findMealTimesByRecipeId(recipeId);
@@ -66,6 +73,7 @@ public class RecipeService {
 
         return RecipeDetailResponse.of(
                 recipe,
+                postId,
                 mealTimes,
                 ingredients,
                 steps
