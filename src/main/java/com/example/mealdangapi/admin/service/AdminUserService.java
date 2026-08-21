@@ -26,6 +26,8 @@ import java.util.Map;
 public class AdminUserService {
 
     private static final String SUSPENSION_UNTIL_PREFIX = "SUSPENSION_UNTIL=";
+    private static final String SUSPENSION_PERMANENT_PREFIX =
+            "SUSPENSION_PERMANENT=true";
     private static final DateTimeFormatter MEMO_DATE_FORMATTER =
             DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
@@ -40,7 +42,11 @@ public class AdminUserService {
     ) {
         User admin = requireActiveAdmin(adminEmail);
         User targetUser = findTargetUser(targetUserId);
-        validateSuspendRequest(admin, targetUser, request);
+        SuspensionPolicy policy = validateSuspendRequest(
+                admin,
+                targetUser,
+                request
+        );
 
         if (isEffectivelySuspended(targetUser)) {
             throw new BusinessException(
@@ -50,7 +56,9 @@ public class AdminUserService {
         }
 
         LocalDateTime suspendedAt = LocalDateTime.now();
-        LocalDateTime suspendedUntil = suspendedAt.plusDays(request.durationDays());
+        LocalDateTime suspendedUntil = policy.permanent()
+                ? null
+                : suspendedAt.plusDays(policy.durationDays());
 
         jdbcTemplate.update(
                 """
@@ -69,7 +77,7 @@ public class AdminUserService {
                 targetUser.getUserId(),
                 "SUSPEND_USER",
                 buildSuspensionMemo(
-                        request.durationDays(),
+                        policy,
                         suspendedUntil,
                         request.memo()
                 )
@@ -80,10 +88,14 @@ public class AdminUserService {
                 targetUser.getEmail(),
                 targetUser.getNickname(),
                 true,
-                request.durationDays(),
+                policy.durationDays(),
+                policy.permanent(),
                 suspendedAt,
                 suspendedUntil,
-                "회원 정지 처리가 완료되었습니다."
+                policy.permanent()
+                        ? "회원이 영구 정지되었습니다."
+                        : "회원이 %d일 정지되었습니다."
+                        .formatted(policy.durationDays())
         );
     }
 
@@ -127,6 +139,7 @@ public class AdminUserService {
                 targetUser.getNickname(),
                 false,
                 null,
+                false,
                 null,
                 null,
                 "회원 정지가 해제되었습니다."
@@ -147,6 +160,8 @@ public class AdminUserService {
                 targetUser.getEmail(),
                 targetUser.getNickname(),
                 state.suspended(),
+                state.durationDays(),
+                state.permanent(),
                 state.suspendedUntil(),
                 state.remainingDays(),
                 state.message()
@@ -154,8 +169,8 @@ public class AdminUserService {
     }
 
     /**
-     * 로그인 API와 JWT 필터가 공통으로 사용한다.
-     * WITHDRAWN은 별도 회원 탈퇴 정책이므로 여기서는 정지 여부만 판단한다.
+     * 일반 로그인과 JWT 인증 필터가 공통으로 사용한다.
+     * 기간 만료 정지는 users.status가 SUSPENDED로 남아 있어도 실효 정지로 보지 않는다.
      */
     @Transactional(readOnly = true)
     public boolean isEffectivelySuspended(User user) {
@@ -207,7 +222,7 @@ public class AdminUserService {
                 ));
     }
 
-    private void validateSuspendRequest(
+    private SuspensionPolicy validateSuspendRequest(
             User admin,
             User targetUser,
             AdminUserController.SuspensionRequest request
@@ -233,17 +248,10 @@ public class AdminUserService {
             );
         }
 
-        if (request == null || request.durationDays() == null) {
+        if (request == null) {
             throw new BusinessException(
                     ErrorCode.INVALID_INPUT,
-                    "정지 기간은 필수입니다."
-            );
-        }
-
-        if (request.durationDays() != 7 && request.durationDays() != 30) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_INPUT,
-                    "정지 기간은 7일 또는 30일만 선택할 수 있습니다."
+                    "정지 유형은 필수입니다."
             );
         }
 
@@ -254,6 +262,30 @@ public class AdminUserService {
                     "관리자 메모는 400자 이하여야 합니다."
             );
         }
+
+        boolean permanent = Boolean.TRUE.equals(request.permanent());
+
+        if (permanent) {
+            if (request.durationDays() != null) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_INPUT,
+                        "영구 정지에는 durationDays를 함께 보낼 수 없습니다."
+                );
+            }
+
+            return new SuspensionPolicy(null, true);
+        }
+
+        if (request.durationDays() == null
+                || (request.durationDays() != 7
+                && request.durationDays() != 30)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_INPUT,
+                    "정지 기간은 7일, 30일, 영구 정지 중 하나여야 합니다."
+            );
+        }
+
+        return new SuspensionPolicy(request.durationDays(), false);
     }
 
     private SuspensionState resolveSuspensionState(User user) {
@@ -265,8 +297,7 @@ public class AdminUserService {
                 """
                 SELECT
                     action_type AS actionType,
-                    memo AS memo,
-                    created_at AS createdAt
+                    memo AS memo
                 FROM admin_actions
                 WHERE target_type = 'USER'
                   AND target_id = :targetUserId
@@ -282,7 +313,7 @@ public class AdminUserService {
 
         if (rows.isEmpty()) {
             return user.getStatus() == UserStatus.SUSPENDED
-                    ? SuspensionState.suspendedWithoutExpiry()
+                    ? SuspensionState.permanentWithoutHistory()
                     : SuspensionState.notSuspended(null);
         }
 
@@ -293,12 +324,23 @@ public class AdminUserService {
             return SuspensionState.notSuspended(null);
         }
 
-        LocalDateTime suspendedUntil = extractSuspensionUntil(
-                stringValue(latestAction.get("memo"))
-        );
+        String memo = stringValue(latestAction.get("memo"));
+
+        if (isPermanentMemo(memo)) {
+            return new SuspensionState(
+                    true,
+                    null,
+                    true,
+                    null,
+                    null,
+                    "영구 정지된 회원입니다."
+            );
+        }
+
+        LocalDateTime suspendedUntil = extractSuspensionUntil(memo);
 
         if (suspendedUntil == null) {
-            return SuspensionState.suspendedWithoutExpiry();
+            return SuspensionState.permanentWithoutHistory();
         }
 
         if (!suspendedUntil.isAfter(LocalDateTime.now())) {
@@ -315,8 +357,14 @@ public class AdminUserService {
                 )
         );
 
+        long durationDays = extractDurationDays(memo);
+
         return new SuspensionState(
                 true,
+                durationDays == 7 || durationDays == 30
+                        ? (int) durationDays
+                        : null,
+                false,
                 suspendedUntil,
                 remainingDays,
                 "정지 기간이 남아 있습니다."
@@ -354,20 +402,31 @@ public class AdminUserService {
     }
 
     private String buildSuspensionMemo(
-            Integer durationDays,
+            SuspensionPolicy policy,
             LocalDateTime suspendedUntil,
             String requestMemo
     ) {
-        String baseMemo = SUSPENSION_UNTIL_PREFIX
-                + MEMO_DATE_FORMATTER.format(suspendedUntil)
-                + " | durationDays="
-                + durationDays;
+        String baseMemo;
+
+        if (policy.permanent()) {
+            baseMemo = SUSPENSION_PERMANENT_PREFIX;
+        } else {
+            baseMemo = SUSPENSION_UNTIL_PREFIX
+                    + MEMO_DATE_FORMATTER.format(suspendedUntil)
+                    + " | durationDays="
+                    + policy.durationDays();
+        }
 
         if (!StringUtils.hasText(requestMemo)) {
             return baseMemo;
         }
 
         return baseMemo + " | " + requestMemo.trim();
+    }
+
+    private boolean isPermanentMemo(String memo) {
+        return StringUtils.hasText(memo)
+                && memo.startsWith(SUSPENSION_PERMANENT_PREFIX);
     }
 
     private LocalDateTime extractSuspensionUntil(String memo) {
@@ -387,6 +446,22 @@ public class AdminUserService {
         }
     }
 
+    private long extractDurationDays(String memo) {
+        if (!StringUtils.hasText(memo) || !memo.contains("durationDays=")) {
+            return 0;
+        }
+
+        String value = memo.substring(
+                memo.indexOf("durationDays=") + "durationDays=".length()
+        ).split("\\|", 2)[0].trim();
+
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
     private String stringValue(Object value) {
         return value == null ? null : value.toString();
     }
@@ -397,6 +472,7 @@ public class AdminUserService {
             String nickname,
             boolean suspended,
             Integer durationDays,
+            boolean permanent,
             LocalDateTime suspendedAt,
             LocalDateTime suspendedUntil,
             String message
@@ -408,24 +484,43 @@ public class AdminUserService {
             String email,
             String nickname,
             boolean suspended,
+            Integer durationDays,
+            boolean permanent,
             LocalDateTime suspendedUntil,
             Long remainingDays,
             String message
     ) {
     }
 
+    private record SuspensionPolicy(
+            Integer durationDays,
+            boolean permanent
+    ) {
+    }
+
     private record SuspensionState(
             boolean suspended,
+            Integer durationDays,
+            boolean permanent,
             LocalDateTime suspendedUntil,
             Long remainingDays,
             String message
     ) {
         private static SuspensionState notSuspended(String message) {
-            return new SuspensionState(false, null, null, message);
+            return new SuspensionState(
+                    false,
+                    null,
+                    false,
+                    null,
+                    null,
+                    message
+            );
         }
 
-        private static SuspensionState suspendedWithoutExpiry() {
+        private static SuspensionState permanentWithoutHistory() {
             return new SuspensionState(
+                    true,
+                    null,
                     true,
                     null,
                     null,
