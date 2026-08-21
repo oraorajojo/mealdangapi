@@ -20,6 +20,15 @@ public class BoardPostDetailResponse {
     private Long postId;
     private Long recipeId;
     private Long authorUserId;
+
+    /**
+     * 작성자 닉네임.
+     *
+     * authorUserId(숫자)만으로는 화면에 작성자를 표시할 수 없어 함께 내려준다.
+     * 조회에 실패하면 null이 될 수 있으므로 프론트에서 기본 문구 처리를 권장한다.
+     */
+    private String authorNickname;
+
     private String title;
     private String content;
     private int viewCount;
@@ -39,6 +48,7 @@ public class BoardPostDetailResponse {
 
     public static BoardPostDetailResponse of(
             BoardPost post,
+            String authorNickname,
             boolean liked,
             boolean reported
     ) {
@@ -46,6 +56,7 @@ public class BoardPostDetailResponse {
                 post.getPostId(),
                 post.getRecipeId(),
                 post.getUserId(),
+                authorNickname,
                 post.getTitle(),
                 post.getContent(),
                 post.getViewCount(),

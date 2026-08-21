@@ -14,6 +14,8 @@ import com.example.mealdangapi.global.error.ErrorCode;
 import com.example.mealdangapi.recipe.entity.ChefCode;
 import com.example.mealdangapi.recipe.entity.MealTime;
 import com.example.mealdangapi.review.repository.ReviewRepository;
+import com.example.mealdangapi.user.entity.User;
+import com.example.mealdangapi.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,13 +34,14 @@ import java.util.Set;
 /**
  * 게시글 조회 서비스 (미식 연구소) — 담당: 종선
  *
- * ★ 목록 조회의 쿼리 구성 (총 4번)
+ * ★ 목록 조회의 쿼리 구성 (총 5번)
  *   ① 게시글 + 레시피 조인 (필터·페이징 포함)
- *   ② 시간대 배지 일괄 조회
- *   ③ 후기 수 일괄 조회
- *   ④ 좋아요 여부 일괄 조회 (비로그인이면 생략)
+ *   ② 작성자 닉네임 일괄 조회
+ *   ③ 시간대 배지 일괄 조회
+ *   ④ 후기 수 일괄 조회
+ *   ⑤ 좋아요 여부 일괄 조회 (비로그인이면 생략)
  *
- *   ②③④를 게시글마다 개별 조회하면 12개 목록에 쿼리가 36번 나간다(N+1).
+ *   ②~⑤를 게시글마다 개별 조회하면 12개 목록에 쿼리가 48번 나간다(N+1).
  *   IN 절로 묶어 각 1번으로 처리한다.
  */
 @Service
@@ -49,6 +52,7 @@ public class BoardPostService {
     private final PostLikeRepository postLikeRepository;
     private final PostReportRepository postReportRepository;
     private final ReviewRepository reviewRepository;
+    private final UserRepository userRepository;
 
     /**
      * 게시판 목록 조회. 비로그인도 열람 가능하다.
@@ -93,7 +97,13 @@ public class BoardPostService {
                 .map(BoardPostListRow::getPostId)
                 .toList();
 
-        // ②③④ 부가 정보를 각각 한 번의 쿼리로 가져온다
+        List<Long> authorIds = rows.getContent().stream()
+                .map(BoardPostListRow::getAuthorUserId)
+                .distinct()
+                .toList();
+
+        // ②~⑤ 부가 정보를 각각 한 번의 쿼리로 가져온다
+        Map<Long, String> nicknames = loadNicknames(authorIds);
         Map<Long, List<String>> mealTimesByRecipe = loadMealTimes(recipeIds);
         Map<Long, Long> reviewCountsByRecipe = loadReviewCounts(recipeIds);
         Set<Long> likedPostIds = loadLikedPostIds(userId, postIds);
@@ -101,6 +111,7 @@ public class BoardPostService {
         return PageResponse.from(rows, row ->
                 BoardPostListItemResponse.of(
                         row,
+                        nicknames.get(row.getAuthorUserId()),
                         mealTimesByRecipe.getOrDefault(row.getRecipeId(), List.of()),
                         reviewCountsByRecipe.getOrDefault(row.getRecipeId(), 0L),
                         likedPostIds.contains(row.getPostId())
@@ -155,7 +166,31 @@ public class BoardPostService {
                     .existsByPostIdAndReporterUserId(post.getPostId(), userId);
         }
 
-        return BoardPostDetailResponse.of(post, liked, reported);
+        String authorNickname = userRepository.findById(post.getUserId())
+                .map(User::getNickname)
+                .orElse(null);
+
+        return BoardPostDetailResponse.of(post, authorNickname, liked, reported);
+    }
+
+    /**
+     * 작성자 닉네임을 한 번의 쿼리로 조회.
+     *
+     * 게시글마다 개별 조회하면 12개 목록에 쿼리가 12번 나간다(N+1).
+     * 같은 사람이 여러 글을 쓴 경우도 있어 distinct 처리된 ID로 조회한다.
+     */
+    private Map<Long, String> loadNicknames(List<Long> authorIds) {
+        if (authorIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, String> result = new HashMap<>();
+
+        for (User user : userRepository.findAllById(authorIds)) {
+            result.put(user.getUserId(), user.getNickname());
+        }
+
+        return result;
     }
 
     /**
