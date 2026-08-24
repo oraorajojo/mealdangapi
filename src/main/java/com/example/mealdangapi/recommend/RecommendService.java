@@ -129,53 +129,63 @@ public class RecommendService {
         return (value == null || value.isBlank()) ? null : AnnoyanceBand.valueOf(value);
     }
 
+    // 예전엔 KOREAN/CHINESE/WESTERN마다 따로 조회해서 쿼리가 6번(레시피+재료 각 3번) 나갔다.
+    // chefCode는 FastAPI로 보내는 각 후보 데이터에 이미 담겨 있어서(FastApiCandidateRecipe.chefCode),
+    // 셰프별로 나눠 조회할 필요 없이 조건에 맞는 레시피를 한 번에 다 가져와도 결과는 똑같다.
+    // (셰프별로 후보를 나누는 건 FastAPI의 pick_best()가 알아서 한다)
     private List<FastApiCandidateRecipe> buildCandidates(MealTime mealTime, AnnoyanceBand band) {
-        List<FastApiCandidateRecipe> candidates = new java.util.ArrayList<>();
+        Specification<Recipe> spec = Specification
+            .where(RecipeSpecification.activeOnly())
+            .and(RecipeSpecification.excludeUserSubmission());
 
-        for (ChefCode chefCode : List.of(ChefCode.KOREAN, ChefCode.CHINESE, ChefCode.WESTERN)) {
-            Specification<Recipe> spec = Specification
-                .where(RecipeSpecification.activeOnly())
-                .and(RecipeSpecification.excludeUserSubmission())
-                .and(RecipeSpecification.chefCodeEquals(chefCode));
-
-            if (mealTime != null) {
-                spec = spec.and(RecipeSpecification.mealTimeEquals(mealTime));
-            }
-            if (band != null) {
-                spec = spec
-                    .and(RecipeSpecification.annoyanceScoreAtLeast(band.getMinInclusive()))
-                    .and(annoyanceScoreLessThan(band.getMaxExclusive()));
-            }
-
-            List<Recipe> recipes = recipeRepository.findAll(spec);
-            if (recipes.isEmpty()) {
-                continue;
-            }
-
-            List<Long> recipeIds = recipes.stream().map(Recipe::getRecipeId).toList();
-            Map<Long, List<String>> ingredientsByRecipeId = recipeIngredientRepository
-                .findAllWithIngredientByRecipeIds(recipeIds)
-                .stream()
-                .collect(Collectors.groupingBy(
-                    ri -> ri.getRecipe().getRecipeId(),
-                    Collectors.mapping(ri -> ri.getIngredient().getName(), Collectors.toList())
-                ));
-
-            for (Recipe r : recipes) {
-                candidates.add(new FastApiCandidateRecipe(
-                    r.getRecipeId(), r.getChefCode().name(), r.getName(), r.getCookingTimeMin(),
-                    r.getAnnoyanceScore(), r.getKnifeLevel(), r.getDishCount(), r.getImageUrl(),
-                    ingredientsByRecipeId.getOrDefault(r.getRecipeId(), List.of())
-                ));
-            }
+        if (mealTime != null) {
+            spec = spec.and(RecipeSpecification.mealTimeEquals(mealTime));
+        }
+        if (band != null) {
+            spec = spec
+                .and(RecipeSpecification.annoyanceScoreAtLeast(band.getMinInclusive()))
+                .and(annoyanceScoreLessThan(band.getMaxExclusive()));
         }
 
-        return candidates;
+        List<Recipe> recipes = recipeRepository.findAll(spec);
+        if (recipes.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> recipeIds = recipes.stream().map(Recipe::getRecipeId).toList();
+        Map<Long, List<String>> ingredientsByRecipeId = recipeIngredientRepository
+            .findAllWithIngredientByRecipeIds(recipeIds)
+            .stream()
+            .collect(Collectors.groupingBy(
+                ri -> ri.getRecipe().getRecipeId(),
+                Collectors.mapping(ri -> ri.getIngredient().getName(), Collectors.toList())
+            ));
+
+        return recipes.stream()
+            .map(r -> new FastApiCandidateRecipe(
+                r.getRecipeId(), r.getChefCode().name(), r.getName(), r.getCookingTimeMin(),
+                r.getAnnoyanceScore(), r.getKnifeLevel(), r.getDishCount(), r.getImageUrl(),
+                ingredientsByRecipeId.getOrDefault(r.getRecipeId(), List.of())
+            ))
+            .toList();
     }
+
+    // 재료(1099개)+별칭(146개) 전체가 요청마다 거의 안 바뀌는 데이터인데도 매번 DB에서
+    // 새로 긁어오고 있었다(쿼리 2번). 짧은 TTL로 메모리에 캐싱해서 그 2번을 없앤다.
+    // 새 재료/별칭이 추가돼도 최대 TTL만큼만 늦게 반영되는 정도라 추천 정확도엔 문제없다.
+    private static final long DICTIONARY_CACHE_TTL_MILLIS = 5 * 60 * 1000L;
+    private volatile List<FastApiIngredientDictionaryEntry> cachedDictionary;
+    private volatile long dictionaryCachedAtMillis;
 
     // FastAPI는 DB에 접근하지 않으므로, 재료 인식에 쓸 사전(표준명 + 별칭)을 매 요청마다 통째로 넘긴다.
     // 표준명은 term==canonicalName인 자기 자신 항목으로, 별칭은 term=별칭 / canonicalName=연결된 표준명으로 넣는다.
     private List<FastApiIngredientDictionaryEntry> buildIngredientDictionary() {
+        List<FastApiIngredientDictionaryEntry> cached = cachedDictionary;
+        long now = System.currentTimeMillis();
+        if (cached != null && now - dictionaryCachedAtMillis < DICTIONARY_CACHE_TTL_MILLIS) {
+            return cached;
+        }
+
         List<FastApiIngredientDictionaryEntry> dictionary = new java.util.ArrayList<>();
 
         for (Ingredient ingredient : ingredientRepository.findAll()) {
@@ -190,6 +200,9 @@ public class RecommendService {
                 alias.getAlias(), ingredient.getIngredientId(), ingredient.getName()
             ));
         }
+
+        cachedDictionary = dictionary;
+        dictionaryCachedAtMillis = now;
 
         return dictionary;
     }
