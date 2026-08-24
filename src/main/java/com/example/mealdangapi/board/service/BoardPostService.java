@@ -153,6 +153,24 @@ public class BoardPostService {
         return toDetailResponse(post, userId);
     }
 
+    /**
+     * 작성자 본인이 자기 게시글을 삭제. 소프트 삭제(행은 남고 status만 DELETED로).
+     * 연결된 레시피(recipes.is_active)는 건드리지 않는다 — "게시글 삭제"는
+     * 게시판 노출만 내리는 것이고, 레시피 자체를 비활성화하려면
+     * DELETE /api/recipes/{recipeId}를 별도로 호출해야 한다.
+     */
+    @Transactional
+    public void deletePost(Long userId, Long postId) {
+        BoardPost post = boardPostRepository.findById(postId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+
+        if (!post.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.POST_NOT_OWNED);
+        }
+
+        post.deleteBySelf();
+    }
+
     // ─── 내부 헬퍼 ────────────────────────────────────────────────
 
     private BoardPostDetailResponse toDetailResponse(BoardPost post, Long userId) {

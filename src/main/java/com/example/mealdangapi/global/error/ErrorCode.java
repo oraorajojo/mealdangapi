@@ -28,6 +28,8 @@ public enum ErrorCode {
     POST_NOT_VISIBLE(HttpStatus.NOT_FOUND, "POST_NOT_VISIBLE", "비공개 처리된 게시글입니다."),
     // uq_board_posts_recipe(UNIQUE) 위반. 레시피 1개당 게시글 1개 제약.
     POST_ALREADY_EXISTS(HttpStatus.CONFLICT, "POST_ALREADY_EXISTS", "이미 게시글이 등록된 레시피입니다."),
+    // 본인이 작성한 게시글이 아닌데 삭제를 시도한 경우
+    POST_NOT_OWNED(HttpStatus.FORBIDDEN, "POST_NOT_OWNED", "본인이 작성한 게시글만 삭제할 수 있습니다."),
 
     // ─── 좋아요 (종선) ─────────────────────────────────────
     // PK(user_id, post_id) 중복. 규칙사전 §12 "회원당 게시글 1회만"

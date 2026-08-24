@@ -166,6 +166,21 @@ public class BoardPostController {
                 ));
     }
 
+    /**
+     * 게시글 삭제 (로그인 필수, 본인 글만)
+     * DELETE /api/board/posts/{postId}
+     */
+    @DeleteMapping("/{postId}")
+    public ResponseEntity<Void> deletePost(
+            Authentication authentication,
+            @PathVariable Long postId
+    ) {
+        Long userId = requireUserId(authentication);
+        boardPostService.deletePost(userId, postId);
+
+        return ResponseEntity.noContent().build();
+    }
+
     // ─── 인증 처리 헬퍼 ────────────────────────────────────────
 
     /** 로그인 필수 API용. 비로그인이면 401 */

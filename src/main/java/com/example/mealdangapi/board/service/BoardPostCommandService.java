@@ -96,6 +96,15 @@ public class BoardPostCommandService implements BoardPostCommandApi {
         return createBoardPost(recipeId, recipe.getAuthor().getUserId());
     }
 
+    @Override
+    @Transactional
+    public void updatePostContent(Long recipeId) {
+        boardPostRepository.findByRecipeId(recipeId).ifPresent(post -> {
+            Recipe recipe = findRecipe(recipeId);
+            post.updateContent(buildTitle(recipe), buildContent(recipe));
+        });
+    }
+
     // ═══════════════════════════════════════════════════════════
     //  관리자 신고 처리
     // ═══════════════════════════════════════════════════════════

@@ -113,6 +113,11 @@ public class RecipeCommandService {
 
         saveChildData(recipe, request, ingredientsById);
 
+        // board_posts.title/content는 생성 시점에 recipes.name/summary를 복사해 온
+        // 값이라, 레시피만 고치면 게시판 목록엔 옛 제목이 남는다. 연결된 게시글이
+        // 있으면 같이 갱신한다(없으면 boardPostCommandApi가 조용히 넘어간다).
+        boardPostCommandApi.updatePostContent(recipe.getRecipeId());
+
         return new RecipeCreateResponse(
                 recipe.getRecipeId(),
                 "레시피가 수정되었습니다."

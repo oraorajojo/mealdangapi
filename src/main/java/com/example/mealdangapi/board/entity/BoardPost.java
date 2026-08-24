@@ -189,6 +189,14 @@ public class BoardPost {
         this.moderatedAt = LocalDateTime.now();
     }
 
+    /**
+     * 작성자 본인이 삭제. moderated_by_admin_id/moderated_at은 관리자 처리
+     * 기록용이라 본인 삭제에는 채우지 않는다(신고 처리와 구분하기 위함).
+     */
+    public void deleteBySelf() {
+        this.status = PostStatus.DELETED;
+    }
+
     public void updateContent(String title, String content) {
         this.title = title;
         this.content = content;

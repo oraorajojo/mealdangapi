@@ -51,6 +51,26 @@ public interface BoardPostCommandApi {
      */
     Long createBoardPost(Long recipeId);
 
+    /**
+     * 레시피 수정(PATCH /api/recipes/{recipeId}) 시, 그 레시피에 연결된 게시글의
+     * title/content도 같이 갱신한다. board_posts.title/content는 생성 시점에
+     * recipes.name/summary를 복사해 온 반정규화 컬럼이라, 레시피만 고치면
+     * 게시판 목록에는 옛 제목이 그대로 남는다.
+     *
+     * title/content를 직접 받지 않고 recipeId만 받는 이유:
+     *   content는 NOT NULL이라 summary가 비어 있을 때 "OO 레시피입니다." 같은
+     *   대체 문구를 채워야 하는데, 그 규칙(buildContent)이 게시판 쪽에만 있다.
+     *   치연이 문자열을 직접 만들어 넘기면 이 규칙이 두 곳에 흩어진다.
+     *   createBoardPost(Long recipeId) 오버로드와 같은 패턴으로, 최신 레시피를
+     *   여기서 다시 조회해 같은 buildTitle/buildContent로 만든다.
+     *
+     * 연결된 게시글이 없으면(= 그 사이 게시글이 삭제됐거나 애초에 없던 레시피)
+     * 아무 일도 하지 않는다 — 레시피 수정 자체를 막을 이유는 아니다.
+     *
+     * @param recipeId 수정된 레시피 ID
+     */
+    void updatePostContent(Long recipeId);
+
     // ═══════════════════════════════════════════════════════════
     //  관리자 신고 처리
     // ═══════════════════════════════════════════════════════════
