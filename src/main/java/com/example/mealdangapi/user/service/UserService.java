@@ -6,6 +6,7 @@ import com.example.mealdangapi.user.dto.LoginRequest;
 import com.example.mealdangapi.user.dto.UserResponse;
 import com.example.mealdangapi.user.dto.UserSignupRequest;
 import com.example.mealdangapi.user.dto.WithdrawRequest;
+import com.example.mealdangapi.user.entity.CookingLevel;
 import com.example.mealdangapi.user.entity.SocialProvider;
 import com.example.mealdangapi.user.entity.User;
 import com.example.mealdangapi.user.entity.UserStatus;
@@ -82,6 +83,86 @@ public class UserService {
         }
 
         return jwtTokenProvider.generateToken(user.getEmail());
+    }
+
+    /**
+     * 카카오 원클릭 로그인/가입. 비밀번호가 없으므로 일반 로그인과 달리
+     * "계정이 없으면 그 자리에서 만든다"(로그인=가입)로 처리한다.
+     *
+     * social_id(카카오 고유ID) 우선 조회 → 없으면 email로 조회(과거 일반 가입 계정과
+     * 같은 이메일이면 그 계정으로 로그인시킴, 이메일 UNIQUE라 신규 생성 시 충돌 방지도 겸함)
+     * → 그래도 없으면 신규 생성.
+     */
+    @Transactional
+    public String loginOrSignupWithKakao(String email, String kakaoId, String kakaoNickname) {
+        User user = userRepository.findBySocialProviderAndSocialId(SocialProvider.KAKAO, kakaoId)
+                .or(() -> userRepository.findByEmail(email))
+                .orElse(null);
+
+        if (user == null) {
+            user = User.builder()
+                    .email(email)
+                    .passwordHash(null)
+                    .socialProvider(SocialProvider.KAKAO)
+                    .socialId(kakaoId)
+                    .nickname(generateUniqueNickname(kakaoNickname, email))
+                    .cookingLevel(CookingLevel.BEGINNER)
+                    .build();
+            userRepository.save(user);
+        } else {
+            if (user.getStatus() == UserStatus.WITHDRAWN) {
+                throw new IllegalArgumentException("탈퇴한 회원은 로그인할 수 없습니다.");
+            }
+            if (adminUserService.isEffectivelySuspended(user)) {
+                throw new IllegalArgumentException("정지된 회원입니다.");
+            }
+        }
+
+        return jwtTokenProvider.generateToken(user.getEmail());
+    }
+
+    /**
+     * 요리 숙련도까지 직접 고른 카카오 신규 가입 마무리용.
+     * 이미 가입된 이메일이면(예: 새로고침으로 중복 제출) 새로 만들지 않고 그냥 로그인시킨다.
+     */
+    @Transactional
+    public String signupWithKakao(String email, String nickname, CookingLevel cookingLevel) {
+        User existing = userRepository.findByEmail(email).orElse(null);
+        if (existing != null) {
+            return jwtTokenProvider.generateToken(existing.getEmail());
+        }
+
+        if (userRepository.existsByNickname(nickname)) {
+            throw new IllegalArgumentException("이미 사용 중인 닉네임입니다.");
+        }
+
+        User user = User.builder()
+                .email(email)
+                .passwordHash(null)
+                .socialProvider(SocialProvider.KAKAO)
+                .nickname(nickname)
+                .cookingLevel(cookingLevel)
+                .build();
+        userRepository.save(user);
+
+        return jwtTokenProvider.generateToken(user.getEmail());
+    }
+
+    private String generateUniqueNickname(String preferred, String email) {
+        String base = (preferred != null && !preferred.isBlank())
+                ? preferred
+                : email.substring(0, email.indexOf('@'));
+
+        if (!userRepository.existsByNickname(base)) {
+            return base;
+        }
+        for (int i = 0; i < 20; i++) {
+            String candidate = base + "_" + (1000 + (int) (Math.random() * 9000));
+            if (!userRepository.existsByNickname(candidate)) {
+                return candidate;
+            }
+        }
+        return base + "_" + System.currentTimeMillis();
     }
 
     @Transactional

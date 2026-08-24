@@ -44,7 +44,9 @@ public class SecurityConfig {
                                 "/error",
                                 "/api/users/signup",
                                 "/api/users/login",
-                                "/api/users/kakao/callback"
+                                "/api/users/kakao/callback",
+                                "/api/users/login/kakao",
+                                "/api/users/signup/kakao"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,

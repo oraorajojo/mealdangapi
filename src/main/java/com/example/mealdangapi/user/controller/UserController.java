@@ -1,6 +1,8 @@
 package com.example.mealdangapi.user.controller;
 
+import com.example.mealdangapi.user.dto.KakaoCodeLoginRequest;
 import com.example.mealdangapi.user.dto.KakaoLoginResponse;
+import com.example.mealdangapi.user.dto.KakaoSignupRequest;
 import com.example.mealdangapi.user.dto.LoginRequest;
 import com.example.mealdangapi.user.dto.UserResponse;
 import com.example.mealdangapi.user.dto.UserSignupRequest;
@@ -101,5 +103,52 @@ public class UserController {
         KakaoLoginResponse response = kakaoService.getKakaoEmail(code);
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 카카오 원클릭 로그인/가입. 비밀번호 없이 인가코드만으로 처리되며,
+     * 해당 이메일로 가입된 계정이 없으면 그 자리에서 새로 만든다(로그인=가입).
+     */
+    @PostMapping("/login/kakao")
+    public ResponseEntity<Map<String, Object>> loginWithKakao(
+            @RequestBody KakaoCodeLoginRequest request
+    ) {
+        KakaoService.KakaoUserInfo kakaoUser = kakaoService.fetchKakaoUser(
+                request.code(),
+                request.redirectUri()
+        );
+        String accessToken = userService.loginOrSignupWithKakao(
+                kakaoUser.email(),
+                kakaoUser.kakaoId(),
+                kakaoUser.nickname()
+        );
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "message", "카카오 로그인이 완료되었습니다.",
+                        "accessToken", accessToken
+                )
+        );
+    }
+
+    /**
+     * 카카오 신규 가입 마무리(닉네임·요리 숙련도 직접 선택 후 제출).
+     */
+    @PostMapping("/signup/kakao")
+    public ResponseEntity<Map<String, Object>> signupWithKakao(
+            @RequestBody KakaoSignupRequest request
+    ) {
+        String accessToken = userService.signupWithKakao(
+                request.email(),
+                request.nickname(),
+                request.cookingLevel()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(Map.of(
+                        "message", "카카오 회원가입이 완료되었습니다.",
+                        "accessToken", accessToken
+                ));
     }
 }
