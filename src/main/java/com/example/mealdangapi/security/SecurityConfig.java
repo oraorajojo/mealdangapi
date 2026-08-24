@@ -56,7 +56,8 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/recipes/**",
                                 "/api/board/**",
-                                "/api/ingredients/**"
+                                "/api/ingredients/**",
+                                "/uploads/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

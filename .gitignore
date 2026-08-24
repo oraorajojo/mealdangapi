@@ -5,6 +5,9 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+# 로컬 디스크에 저장되는 업로드 이미지 (upload.dir 기본값). 실제 사용자 파일이라 커밋 대상 아님.
+/uploads/
+
 ### STS ###
 .apt_generated
 .classpath
