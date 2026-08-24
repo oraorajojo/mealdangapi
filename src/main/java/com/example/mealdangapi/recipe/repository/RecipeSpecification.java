@@ -4,6 +4,7 @@ import com.example.mealdangapi.recipe.entity.ChefCode;
 import com.example.mealdangapi.recipe.entity.MealTime;
 import com.example.mealdangapi.recipe.entity.Recipe;
 import com.example.mealdangapi.recipe.entity.RecipeMeal;
+import com.example.mealdangapi.recipe.entity.RecipeSourceType;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
@@ -96,6 +97,19 @@ public final class RecipeSpecification {
                 criteriaBuilder.lessThanOrEqualTo(
                         root.get("annoyanceScore"),
                         maxAnnoyance
+                );
+    }
+
+    /**
+     * 회원이 직접 등록한 레시피(USER_SUBMISSION)는 제외한다.
+     * 추천(3셰프 카드)은 관리자 검수를 거친 레시피(ADMIN, FOOD_SAFETY_API)만 노출하고,
+     * 회원 레시피는 미식 연구소 게시판에서 별도로 보여준다.
+     */
+    public static Specification<Recipe> excludeUserSubmission() {
+        return (root, query, criteriaBuilder) ->
+                criteriaBuilder.notEqual(
+                        root.get("sourceType"),
+                        RecipeSourceType.USER_SUBMISSION
                 );
     }
 }

@@ -135,6 +135,7 @@ public class RecommendService {
         for (ChefCode chefCode : List.of(ChefCode.KOREAN, ChefCode.CHINESE, ChefCode.WESTERN)) {
             Specification<Recipe> spec = Specification
                 .where(RecipeSpecification.activeOnly())
+                .and(RecipeSpecification.excludeUserSubmission())
                 .and(RecipeSpecification.chefCodeEquals(chefCode));
 
             if (mealTime != null) {
