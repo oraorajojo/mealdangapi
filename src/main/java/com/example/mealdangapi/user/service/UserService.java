@@ -3,6 +3,7 @@ package com.example.mealdangapi.user.service;
 import com.example.mealdangapi.admin.service.AdminUserService;
 import com.example.mealdangapi.security.JwtTokenProvider;
 import com.example.mealdangapi.user.dto.LoginRequest;
+import com.example.mealdangapi.user.dto.LoginResponse;
 import com.example.mealdangapi.user.dto.UserResponse;
 import com.example.mealdangapi.user.dto.UserSignupRequest;
 import com.example.mealdangapi.user.dto.WithdrawRequest;
@@ -62,7 +63,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public String login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "이메일 또는 비밀번호가 올바르지 않습니다."
@@ -82,7 +83,8 @@ public class UserService {
             );
         }
 
-        return jwtTokenProvider.generateToken(user.getEmail());
+        String accessToken = jwtTokenProvider.generateToken(user.getEmail());
+        return LoginResponse.of("로그인이 완료되었습니다.", accessToken, user);
     }
 
     /**
@@ -94,7 +96,7 @@ public class UserService {
      * → 그래도 없으면 신규 생성.
      */
     @Transactional
-    public String loginOrSignupWithKakao(String email, String kakaoId, String kakaoNickname) {
+    public LoginResponse loginOrSignupWithKakao(String email, String kakaoId, String kakaoNickname) {
         User user = userRepository.findBySocialProviderAndSocialId(SocialProvider.KAKAO, kakaoId)
                 .or(() -> userRepository.findByEmail(email))
                 .orElse(null);
@@ -118,7 +120,8 @@ public class UserService {
             }
         }
 
-        return jwtTokenProvider.generateToken(user.getEmail());
+        String accessToken = jwtTokenProvider.generateToken(user.getEmail());
+        return LoginResponse.of("카카오 로그인이 완료되었습니다.", accessToken, user);
     }
 
     /**
@@ -126,10 +129,11 @@ public class UserService {
      * 이미 가입된 이메일이면(예: 새로고침으로 중복 제출) 새로 만들지 않고 그냥 로그인시킨다.
      */
     @Transactional
-    public String signupWithKakao(String email, String nickname, CookingLevel cookingLevel) {
+    public LoginResponse signupWithKakao(String email, String nickname, CookingLevel cookingLevel) {
         User existing = userRepository.findByEmail(email).orElse(null);
         if (existing != null) {
-            return jwtTokenProvider.generateToken(existing.getEmail());
+            String accessToken = jwtTokenProvider.generateToken(existing.getEmail());
+            return LoginResponse.of("카카오 회원가입이 완료되었습니다.", accessToken, existing);
         }
 
         if (userRepository.existsByNickname(nickname)) {
@@ -145,7 +149,8 @@ public class UserService {
                 .build();
         userRepository.save(user);
 
-        return jwtTokenProvider.generateToken(user.getEmail());
+        String accessToken = jwtTokenProvider.generateToken(user.getEmail());
+        return LoginResponse.of("카카오 회원가입이 완료되었습니다.", accessToken, user);
     }
 
     private String generateUniqueNickname(String preferred, String email) {
