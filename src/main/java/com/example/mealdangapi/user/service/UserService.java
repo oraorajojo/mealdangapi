@@ -21,6 +21,7 @@ import javax.crypto.spec.PBEKeySpec;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -88,40 +89,25 @@ public class UserService {
     }
 
     /**
-     * 카카오 원클릭 로그인/가입. 비밀번호가 없으므로 일반 로그인과 달리
-     * "계정이 없으면 그 자리에서 만든다"(로그인=가입)로 처리한다.
-     *
-     * social_id(카카오 고유ID) 우선 조회 → 없으면 email로 조회(과거 일반 가입 계정과
-     * 같은 이메일이면 그 계정으로 로그인시킴, 이메일 UNIQUE라 신규 생성 시 충돌 방지도 겸함)
-     * → 그래도 없으면 신규 생성.
+     * 카카오 로그인. 이미 가입된 계정(social_id 또는 같은 이메일)이 있을 때만 로그인시킨다.
+     * 없으면 여기서 자동 가입하지 않고 빈 Optional을 돌려준다 — 컨트롤러가 이를 보고
+     * "가입 필요" 응답을 내려서, 프론트가 닉네임·요리 숙련도를 입력받는 화면으로 보낸다.
+     * (신규 가입 자체는 signupWithKakao가 담당)
      */
-    @Transactional
-    public LoginResponse loginOrSignupWithKakao(String email, String kakaoId, String kakaoNickname) {
-        User user = userRepository.findBySocialProviderAndSocialId(SocialProvider.KAKAO, kakaoId)
+    @Transactional(readOnly = true)
+    public Optional<LoginResponse> loginWithKakaoIfExists(String email, String kakaoId) {
+        return userRepository.findBySocialProviderAndSocialId(SocialProvider.KAKAO, kakaoId)
                 .or(() -> userRepository.findByEmail(email))
-                .orElse(null);
-
-        if (user == null) {
-            user = User.builder()
-                    .email(email)
-                    .passwordHash(null)
-                    .socialProvider(SocialProvider.KAKAO)
-                    .socialId(kakaoId)
-                    .nickname(generateUniqueNickname(kakaoNickname, email))
-                    .cookingLevel(CookingLevel.BEGINNER)
-                    .build();
-            userRepository.save(user);
-        } else {
-            if (user.getStatus() == UserStatus.WITHDRAWN) {
-                throw new IllegalArgumentException("탈퇴한 회원은 로그인할 수 없습니다.");
-            }
-            if (adminUserService.isEffectivelySuspended(user)) {
-                throw new IllegalArgumentException("정지된 회원입니다.");
-            }
-        }
-
-        String accessToken = jwtTokenProvider.generateToken(user.getEmail());
-        return LoginResponse.of("카카오 로그인이 완료되었습니다.", accessToken, user);
+                .map(user -> {
+                    if (user.getStatus() == UserStatus.WITHDRAWN) {
+                        throw new IllegalArgumentException("탈퇴한 회원은 로그인할 수 없습니다.");
+                    }
+                    if (adminUserService.isEffectivelySuspended(user)) {
+                        throw new IllegalArgumentException("정지된 회원입니다.");
+                    }
+                    String accessToken = jwtTokenProvider.generateToken(user.getEmail());
+                    return LoginResponse.of("카카오 로그인이 완료되었습니다.", accessToken, user);
+                });
     }
 
     /**
@@ -151,23 +137,6 @@ public class UserService {
 
         String accessToken = jwtTokenProvider.generateToken(user.getEmail());
         return LoginResponse.of("카카오 회원가입이 완료되었습니다.", accessToken, user);
-    }
-
-    private String generateUniqueNickname(String preferred, String email) {
-        String base = (preferred != null && !preferred.isBlank())
-                ? preferred
-                : email.substring(0, email.indexOf('@'));
-
-        if (!userRepository.existsByNickname(base)) {
-            return base;
-        }
-        for (int i = 0; i < 20; i++) {
-            String candidate = base + "_" + (1000 + (int) (Math.random() * 9000));
-            if (!userRepository.existsByNickname(candidate)) {
-                return candidate;
-            }
-        }
-        return base + "_" + System.currentTimeMillis();
     }
 
     @Transactional

@@ -100,24 +100,28 @@ public class UserController {
     }
 
     /**
-     * 카카오 원클릭 로그인/가입. 비밀번호 없이 인가코드만으로 처리되며,
-     * 해당 이메일로 가입된 계정이 없으면 그 자리에서 새로 만든다(로그인=가입).
+     * 카카오 로그인. 이미 가입된 계정이면 바로 로그인(200). 처음 보는 계정이면
+     * 자동 가입하지 않고, 프론트가 닉네임·요리 숙련도 입력 화면으로 보낼 수 있도록
+     * 404 + needsSignup 신호를 내려준다. 실제 가입은 POST /signup/kakao가 담당한다.
      */
     @PostMapping("/login/kakao")
-    public ResponseEntity<LoginResponse> loginWithKakao(
+    public ResponseEntity<?> loginWithKakao(
             @RequestBody KakaoCodeLoginRequest request
     ) {
         KakaoService.KakaoUserInfo kakaoUser = kakaoService.fetchKakaoUser(
                 request.code(),
                 request.redirectUri()
         );
-        LoginResponse response = userService.loginOrSignupWithKakao(
-                kakaoUser.email(),
-                kakaoUser.kakaoId(),
-                kakaoUser.nickname()
-        );
 
-        return ResponseEntity.ok(response);
+        return userService.loginWithKakaoIfExists(kakaoUser.email(), kakaoUser.kakaoId())
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity
+                        .status(HttpStatus.NOT_FOUND)
+                        .body(Map.of(
+                                "needsSignup", true,
+                                "email", kakaoUser.email(),
+                                "suggestedNickname", kakaoUser.nickname() == null ? "" : kakaoUser.nickname()
+                        )));
     }
 
     /**
