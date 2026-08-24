@@ -64,6 +64,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 서비스 계층에서 잘못된 요청/입력을 나타내려고 직접 던진 IllegalArgumentException.
+     * (예: user 도메인의 "이미 사용 중인 이메일입니다", "비밀번호가 일치하지 않습니다" 등)
+     *
+     * 전용 핸들러가 없으면 아래 handleUnexpected로 떨어져서 500 + "서버 오류가 발생했습니다"로
+     * 뭉개져버린다. 개발자가 써둔 구체적인 메시지가 프론트까지 전달되도록 400으로 받아준다.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("[IllegalArgumentException] {}", e.getMessage());
+        return ResponseEntity
+                .status(ErrorCode.INVALID_INPUT.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_INPUT.getCode(), e.getMessage()));
+    }
+
+    /**
      * DB 제약 위반 (UNIQUE, CHECK, FK).
      *
      * 원칙은 서비스에서 미리 검사해서 BusinessException으로 막는 것이지만,
