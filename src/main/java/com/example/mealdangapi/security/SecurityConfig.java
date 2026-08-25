@@ -55,7 +55,6 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/recipes/**",
-                                "/api/board/**",
                                 "/api/ingredients/**",
                                 "/uploads/**"
                         ).permitAll()
