@@ -69,6 +69,23 @@ public class RecipeStorageService {
         );
     }
 
+    /** 레시피 상세의 "찜 수" 표시용. 로그인 여부와 무관하게 조회 가능하다 */
+    public long countBookmarks(Long recipeId) {
+        String sql = """
+                SELECT COUNT(*)
+                FROM recipe_bookmarks
+                WHERE recipe_id = :recipeId
+                """;
+
+        Long count = jdbcTemplate.queryForObject(
+                sql,
+                new MapSqlParameterSource("recipeId", recipeId),
+                Long.class
+        );
+
+        return count == null ? 0 : count;
+    }
+
     public List<StoredRecipeResponse> getBookmarks(
             String userEmail,
             int size

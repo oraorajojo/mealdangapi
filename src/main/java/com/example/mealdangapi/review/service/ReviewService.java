@@ -4,6 +4,7 @@ import com.example.mealdangapi.global.common.PageResponse;
 import com.example.mealdangapi.global.error.BusinessException;
 import com.example.mealdangapi.global.error.ErrorCode;
 import com.example.mealdangapi.recipe.repository.RecipeRepository;
+import com.example.mealdangapi.recommend.ChefSelectionRepository;
 import com.example.mealdangapi.review.dto.request.ReviewRequest;
 import com.example.mealdangapi.review.dto.response.ReviewResponse;
 import com.example.mealdangapi.review.dto.response.ReviewSummaryResponse;
@@ -41,6 +42,7 @@ public class ReviewService {
     private final ReviewRepository reviewRepository;
     private final RecipeRepository recipeRepository;
     private final UserRepository userRepository;
+    private final ChefSelectionRepository chefSelectionRepository;
 
     /**
      * 레시피의 후기 목록 (최신순). 비로그인도 열람 가능하다.
@@ -97,12 +99,15 @@ public class ReviewService {
                     .orElse(null);
         }
 
+        long selectionCount = chefSelectionRepository.countByRecipeId(recipeId);
+
         return new ReviewSummaryResponse(
                 recipeId,
                 rounded,
                 count,
                 myReviewId != null,
-                myReviewId
+                myReviewId,
+                count + selectionCount
         );
     }
 

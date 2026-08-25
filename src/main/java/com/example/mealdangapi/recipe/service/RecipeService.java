@@ -15,6 +15,7 @@ import com.example.mealdangapi.recipe.repository.RecipeMealRepository;
 import com.example.mealdangapi.recipe.repository.RecipeRepository;
 import com.example.mealdangapi.recipe.repository.RecipeSpecification;
 import com.example.mealdangapi.recipe.repository.RecipeStepRepository;
+import com.example.mealdangapi.recipe.storage.RecipeStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,6 +43,7 @@ public class RecipeService {
     private final RecipeStepRepository recipeStepRepository;
     private final RecipeMealRepository recipeMealRepository;
     private final BoardPostRepository boardPostRepository;
+    private final RecipeStorageService recipeStorageService;
 
     public RecipeDetailResponse getRecipeDetail(Long recipeId) {
         Recipe recipe = recipeRepository
@@ -71,12 +73,15 @@ public class RecipeService {
                 .map(RecipeStepResponse::from)
                 .toList();
 
+        long bookmarkCount = recipeStorageService.countBookmarks(recipeId);
+
         return RecipeDetailResponse.of(
                 recipe,
                 postId,
                 mealTimes,
                 ingredients,
-                steps
+                steps,
+                bookmarkCount
         );
     }
 

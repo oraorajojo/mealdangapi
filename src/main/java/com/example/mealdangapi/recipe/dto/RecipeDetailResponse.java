@@ -28,12 +28,16 @@ public class RecipeDetailResponse {
     private List<RecipeIngredientResponse> ingredients;
     private List<RecipeStepResponse> steps;
 
+    /** recipe_bookmarks 테이블을 COUNT한 실시간 찜 수 */
+    private long bookmarkCount;
+
     public static RecipeDetailResponse of(
             Recipe recipe,
             Long postId,
             List<MealTime> mealTimes,
             List<RecipeIngredientResponse> ingredients,
-            List<RecipeStepResponse> steps
+            List<RecipeStepResponse> steps,
+            long bookmarkCount
     ) {
         return new RecipeDetailResponse(
                 recipe.getRecipeId(),
@@ -50,7 +54,8 @@ public class RecipeDetailResponse {
                 recipe.getSourceType().name(),
                 mealTimes,
                 ingredients,
-                steps
+                steps,
+                bookmarkCount
         );
     }
 }

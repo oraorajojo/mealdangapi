@@ -10,9 +10,10 @@ import lombok.Getter;
  *   후기 평점  4.6
  *   조리 완료  27회
  *
- * ※ "조리 완료 27회"는 현재 후기 수(reviewCount)로 내려준다.
- *   규칙사전 §10의 "이 메뉴 만들게요" 선택 기록은 CHEF_SELECTIONS에 별도 저장되며
- *   담당 영역이 다르다. 그 값을 써야 한다면 추후 협의해 변경한다.
+ * "조리 완료 27회" = 후기 수(reviewCount) + "이 메뉴 만들게요" 선택 수(CHEF_SELECTIONS,
+ * 규칙사전 §10)의 합산이다. 후기를 쓰거나 메뉴를 선택하기만 해도 둘 다 "조리를 완료했다"는
+ * 신호로 보기로 협의했다. 한 사람이 후기도 쓰고 선택도 했다면 중복 집계되지만,
+ * 이 값은 "조리 완료 인증 횟수" 성격이라 중복 제거는 하지 않는다.
  */
 @Getter
 @AllArgsConstructor
@@ -44,4 +45,7 @@ public class ReviewSummaryResponse {
 
     /** 내가 쓴 후기의 ID. written이 false면 null */
     private Long myReviewId;
+
+    /** "조리 완료 N회" = reviewCount + CHEF_SELECTIONS 선택 수 */
+    private long completedCount;
 }
