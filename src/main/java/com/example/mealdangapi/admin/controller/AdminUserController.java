@@ -1,7 +1,9 @@
 package com.example.mealdangapi.admin.controller;
 
+import com.example.mealdangapi.admin.dto.AdminUserSummaryResponse;
 import com.example.mealdangapi.admin.service.AdminUserService;
 import com.example.mealdangapi.global.common.ApiResponse;
+import com.example.mealdangapi.global.common.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -19,6 +22,31 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
+
+    /**
+     * 관리자 "신고 유저 정지" 전체 목록 (ADMIN 역할 제외).
+     * GET /api/admin/users?page=0&size=10&sort=reportCount
+     *
+     * sort=reportCount 이면 신고 누적 횟수가 많은 순, 생략하면 가입일 최신순.
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<PageResponse<AdminUserSummaryResponse>>> getAllUsers(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String sort
+    ) {
+        return ResponseEntity.ok(
+                ApiResponse.ok(
+                        adminUserService.getAllUsers(
+                                authentication.getName(),
+                                page,
+                                size,
+                                "reportCount".equals(sort)
+                        )
+                )
+        );
+    }
 
     /**
      * 관리자 회원 정지 처리.

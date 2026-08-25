@@ -18,6 +18,7 @@ import com.example.mealdangapi.recipe.repository.RecipeMealRepository;
 import com.example.mealdangapi.recipe.repository.RecipeRepository;
 import com.example.mealdangapi.recipe.repository.RecipeStepRepository;
 import com.example.mealdangapi.user.entity.User;
+import com.example.mealdangapi.user.entity.UserRole;
 import com.example.mealdangapi.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -90,7 +91,7 @@ public class RecipeCommandService {
     ) {
         validateRequest(request);
 
-        Recipe recipe = findOwnedActiveUserRecipe(recipeId, userEmail);
+        Recipe recipe = findEditableActiveRecipe(recipeId, userEmail);
         Map<Long, Ingredient> ingredientsById = findAndValidateIngredients(
                 request.getIngredients()
         );
@@ -129,7 +130,7 @@ public class RecipeCommandService {
             Long recipeId,
             String userEmail
     ) {
-        Recipe recipe = findOwnedActiveUserRecipe(recipeId, userEmail);
+        Recipe recipe = findEditableActiveRecipe(recipeId, userEmail);
         recipe.deactivate();
     }
 
@@ -155,7 +156,20 @@ public class RecipeCommandService {
                 ));
     }
 
-    private Recipe findOwnedActiveUserRecipe(
+    private boolean isAdmin(String userEmail) {
+        return userRepository.findByEmail(userEmail)
+                .map(user -> user.getRole() == UserRole.ADMIN)
+                .orElse(false);
+    }
+
+    /**
+     * 수정/비활성화 대상 레시피를 찾는다.
+     *
+     * 관리자는 소유자·출처(sourceType) 제한 없이 아무 레시피나(공공 API로
+     * 들여온 레시피 포함) 수정·비활성화할 수 있다. 일반 회원은 기존과 동일하게
+     * 본인이 등록한 USER_SUBMISSION 레시피만 가능하다.
+     */
+    private Recipe findEditableActiveRecipe(
             Long recipeId,
             String userEmail
     ) {
@@ -170,6 +184,10 @@ public class RecipeCommandService {
                     HttpStatus.NOT_FOUND,
                     "활성 레시피를 찾을 수 없습니다."
             );
+        }
+
+        if (isAdmin(userEmail)) {
+            return recipe;
         }
 
         if (recipe.getSourceType() != RecipeSourceType.USER_SUBMISSION

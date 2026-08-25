@@ -1,6 +1,9 @@
 package com.example.mealdangapi.admin.service;
 
 import com.example.mealdangapi.admin.controller.AdminUserController;
+import com.example.mealdangapi.admin.dto.AdminUserListRow;
+import com.example.mealdangapi.admin.dto.AdminUserSummaryResponse;
+import com.example.mealdangapi.global.common.PageResponse;
 import com.example.mealdangapi.global.error.BusinessException;
 import com.example.mealdangapi.global.error.ErrorCode;
 import com.example.mealdangapi.user.entity.User;
@@ -8,6 +11,9 @@ import com.example.mealdangapi.user.entity.UserRole;
 import com.example.mealdangapi.user.entity.UserStatus;
 import com.example.mealdangapi.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,6 +39,47 @@ public class AdminUserService {
 
     private final UserRepository userRepository;
     private final NamedParameterJdbcTemplate jdbcTemplate;
+
+    private static final int PAGE_SIZE_MIN = 1;
+    private static final int PAGE_SIZE_MAX = 50;
+
+    /**
+     * 관리자 "신고 유저 정지" 전체 목록 — ADMIN 제외, 신고 누적 횟수 기준
+     * 정렬 여부를 고를 수 있다.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<AdminUserSummaryResponse> getAllUsers(
+            String adminEmail,
+            int page,
+            int size,
+            boolean sortByReportCount
+    ) {
+        requireActiveAdmin(adminEmail);
+        validateListParameters(page, size);
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<AdminUserListRow> rows = sortByReportCount
+                ? userRepository.findAllNonAdminUsersByReportCountDesc(UserRole.ADMIN, pageable)
+                : userRepository.findAllNonAdminUsers(UserRole.ADMIN, pageable);
+
+        return PageResponse.from(rows, AdminUserSummaryResponse::of);
+    }
+
+    private void validateListParameters(int page, int size) {
+        if (page < 0) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_INPUT,
+                    "page는 0 이상이어야 합니다."
+            );
+        }
+
+        if (size < PAGE_SIZE_MIN || size > PAGE_SIZE_MAX) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_INPUT,
+                    "size는 1~50 사이여야 합니다."
+            );
+        }
+    }
 
     @Transactional
     public SuspensionResponse suspendUser(

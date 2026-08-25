@@ -15,6 +15,7 @@ import com.example.mealdangapi.recipe.entity.ChefCode;
 import com.example.mealdangapi.recipe.entity.MealTime;
 import com.example.mealdangapi.review.repository.ReviewRepository;
 import com.example.mealdangapi.user.entity.User;
+import com.example.mealdangapi.user.entity.UserRole;
 import com.example.mealdangapi.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -162,21 +163,36 @@ public class BoardPostService {
     }
 
     /**
-     * 작성자 본인이 자기 게시글을 삭제. 소프트 삭제(행은 남고 status만 DELETED로).
-     * 연결된 레시피(recipes.is_active)는 건드리지 않는다 — "게시글 삭제"는
-     * 게시판 노출만 내리는 것이고, 레시피 자체를 비활성화하려면
+     * 게시글 삭제. 작성자 본인 또는 관리자만 가능하다. 소프트 삭제(행은 남고
+     * status만 DELETED로). 연결된 레시피(recipes.is_active)는 건드리지 않는다 —
+     * "게시글 삭제"는 게시판 노출만 내리는 것이고, 레시피 자체를 비활성화하려면
      * DELETE /api/recipes/{recipeId}를 별도로 호출해야 한다.
+     *
+     * 본인 삭제와 관리자 삭제를 구분해서 기록한다: 본인 삭제(deleteBySelf)는
+     * moderated_by_admin_id를 남기지 않고, 관리자 삭제(softDelete)는 처리자를
+     * 남긴다 — BoardPost 엔티티의 두 메서드가 원래 그 용도로 나뉘어 있다.
      */
     @Transactional
-    public void deletePost(Long userId, Long postId) {
+    public void deletePost(Long requesterId, Long postId) {
         BoardPost post = boardPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
 
-        if (!post.getUserId().equals(userId)) {
+        if (post.getUserId().equals(requesterId)) {
+            post.deleteBySelf();
+            return;
+        }
+
+        if (!isAdmin(requesterId)) {
             throw new BusinessException(ErrorCode.POST_NOT_OWNED);
         }
 
-        post.deleteBySelf();
+        post.softDelete(requesterId);
+    }
+
+    private boolean isAdmin(Long userId) {
+        return userRepository.findById(userId)
+                .map(user -> user.getRole() == UserRole.ADMIN)
+                .orElse(false);
     }
 
     // ─── 내부 헬퍼 ────────────────────────────────────────────────

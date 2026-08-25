@@ -171,7 +171,7 @@ public class BoardPostController {
     }
 
     /**
-     * 게시글 삭제 (로그인 필수, 본인 글만)
+     * 게시글 삭제 (로그인 필수, 본인 글 또는 관리자)
      * DELETE /api/board/posts/{postId}
      */
     @DeleteMapping("/{postId}")
