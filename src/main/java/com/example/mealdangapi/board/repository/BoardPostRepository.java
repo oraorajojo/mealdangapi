@@ -51,6 +51,12 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
      *   직접 조인하면 같은 게시글이 여러 번 나온다(중복 행).
      *   EXISTS는 "조건에 맞는 행이 하나라도 있는가"만 보므로 중복이 생기지 않는다.
      *
+     * ★ 재료 필터(hasKeywords/keywords)도 같은 이유로 EXISTS를 쓴다. 레시피 1개가
+     *   재료를 여러 개 가지므로 recipe_ingredients를 직접 조인하면 중복 행이 생긴다.
+     *   "필터 없음"을 ":keywords IS EMPTY"로 확인하지 않는 이유: JPQL의 IS EMPTY는
+     *   엔티티의 컬렉션 연관관계 경로(o.items 같은)에만 쓸 수 있고 바인드 파라미터엔
+     *   못 쓴다. 대신 boolean 플래그(hasKeywords)를 따로 받아 분기한다.
+     *
      * ★ countQuery를 직접 지정한 이유
      *   생성자 표현식(new ...)이 들어간 쿼리는 Spring Data가 count 쿼리를
      *   자동으로 만들어내지 못한다. 페이징을 쓰려면 반드시 따로 적어줘야 한다.
@@ -68,7 +74,11 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
                     + "  AND (:mealTime IS NULL OR EXISTS ("
                     + "        SELECT 1 FROM RecipeMeal rm "
                     + "        WHERE rm.id.recipeId = r.recipeId "
-                    + "          AND rm.id.mealTime = :mealTime)) ",
+                    + "          AND rm.id.mealTime = :mealTime)) "
+                    + "  AND (:hasKeywords = false OR EXISTS ("
+                    + "        SELECT 1 FROM RecipeIngredient ri "
+                    + "        WHERE ri.recipe.recipeId = r.recipeId "
+                    + "          AND LOWER(ri.ingredient.name) IN :keywords)) ",
             countQuery = "SELECT COUNT(p) "
                     + "FROM BoardPost p, Recipe r "
                     + "WHERE p.recipeId = r.recipeId "
@@ -79,11 +89,17 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
                     + "        SELECT 1 FROM RecipeMeal rm "
                     + "        WHERE rm.id.recipeId = r.recipeId "
                     + "          AND rm.id.mealTime = :mealTime)) "
+                    + "  AND (:hasKeywords = false OR EXISTS ("
+                    + "        SELECT 1 FROM RecipeIngredient ri "
+                    + "        WHERE ri.recipe.recipeId = r.recipeId "
+                    + "          AND LOWER(ri.ingredient.name) IN :keywords)) "
     )
     Page<BoardPostListRow> findBoardList(
             @Param("status") PostStatus status,
             @Param("chefCode") ChefCode chefCode,
             @Param("mealTime") MealTime mealTime,
+            @Param("hasKeywords") boolean hasKeywords,
+            @Param("keywords") List<String> keywords,
             Pageable pageable
     );
 

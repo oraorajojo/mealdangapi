@@ -52,8 +52,11 @@ public class BoardPostController {
      *
      * GET /api/board/posts?chefCode=KOREAN&mealTime=DINNER&page=0&size=12
      *
-     * chefCode : KOREAN / CHINESE / WESTERN / ETC   (생략 시 전체)
-     * mealTime : BREAKFAST / LUNCH / DINNER / LATE_NIGHT (생략 시 전체)
+     * chefCode    : KOREAN / CHINESE / WESTERN / ETC   (생략 시 전체)
+     * mealTime    : BREAKFAST / LUNCH / DINNER / LATE_NIGHT (생략 시 전체)
+     * ingredients : "계란,김치"처럼 콤마로 구분한 재료명. 레시피에 그 재료가
+     *               하나라도 들어간 게시글만 남긴다(생략 시 전체). 추천 결과
+     *               화면의 "연계 추천"이 검색한 재료와 관련된 게시글만 보여주기 위한 것.
      *
      * 와이어프레임의 "전체 / 한식 / 중식 / 양식 / 기타" 및
      * "전체 / 아침 / 점심 / 저녁 / 야식" 필터에 대응한다.
@@ -66,6 +69,7 @@ public class BoardPostController {
             Authentication authentication,
             @RequestParam(required = false) ChefCode chefCode,
             @RequestParam(required = false) MealTime mealTime,
+            @RequestParam(required = false) String ingredients,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size
     ) {
@@ -73,7 +77,7 @@ public class BoardPostController {
 
         return ResponseEntity.ok(
                 ApiResponse.ok(
-                        boardPostService.getPosts(userId, chefCode, mealTime, page, size)
+                        boardPostService.getPosts(userId, chefCode, mealTime, ingredients, page, size)
                 )
         );
     }

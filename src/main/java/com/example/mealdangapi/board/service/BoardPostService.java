@@ -23,11 +23,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,6 +69,7 @@ public class BoardPostService {
             Long userId,
             ChefCode chefCode,
             MealTime mealTime,
+            String ingredients,
             int page,
             int size
     ) {
@@ -75,11 +79,15 @@ public class BoardPostService {
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
 
+        List<String> keywords = parseIngredientKeywords(ingredients);
+
         // ① 게시글 + 레시피 조인. PUBLISHED이면서 레시피가 활성인 것만.
         Page<BoardPostListRow> rows = boardPostRepository.findBoardList(
                 PostStatus.PUBLISHED,
                 chefCode,
                 mealTime,
+                !keywords.isEmpty(),
+                keywords,
                 pageable
         );
 
@@ -172,6 +180,23 @@ public class BoardPostService {
     }
 
     // ─── 내부 헬퍼 ────────────────────────────────────────────────
+
+    /**
+     * "계란,김치" 형태의 콤마 구분 문자열을 재료명 목록으로 변환.
+     * ingredients.name 비교는 소문자 기준(findBoardList 쪽 LOWER(...))이라 여기서도 맞춰준다.
+     */
+    private List<String> parseIngredientKeywords(String ingredients) {
+        if (!StringUtils.hasText(ingredients)) {
+            return List.of();
+        }
+
+        return Arrays.stream(ingredients.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .map(keyword -> keyword.toLowerCase(Locale.ROOT))
+                .distinct()
+                .toList();
+    }
 
     private BoardPostDetailResponse toDetailResponse(BoardPost post, Long userId) {
         boolean liked = false;
