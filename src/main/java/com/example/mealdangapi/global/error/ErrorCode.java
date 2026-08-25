@@ -21,6 +21,12 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "권한이 없습니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "서버 오류가 발생했습니다."),
 
+    // ─── 회원/로그인 ───────────────────────────────────────
+    // 정지·탈퇴 계정의 로그인 실패를 "이메일/비밀번호 오류"와 구분해야
+    // 프론트가 "정지된 계정입니다" 안내를 정확히 띄울 수 있다.
+    ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "ACCOUNT_SUSPENDED", "정지된 회원입니다."),
+    ACCOUNT_WITHDRAWN(HttpStatus.FORBIDDEN, "ACCOUNT_WITHDRAWN", "탈퇴한 회원입니다."),
+
     // ─── 게시판 (종선) ─────────────────────────────────────
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다."),
     // status가 HIDDEN/DELETED인 글에 접근한 경우. NOT_FOUND와 구분해야

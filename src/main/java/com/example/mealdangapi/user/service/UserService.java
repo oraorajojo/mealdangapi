@@ -1,6 +1,8 @@
 package com.example.mealdangapi.user.service;
 
 import com.example.mealdangapi.admin.service.AdminUserService;
+import com.example.mealdangapi.global.error.BusinessException;
+import com.example.mealdangapi.global.error.ErrorCode;
 import com.example.mealdangapi.security.JwtTokenProvider;
 import com.example.mealdangapi.user.dto.LoginRequest;
 import com.example.mealdangapi.user.dto.LoginResponse;
@@ -71,11 +73,11 @@ public class UserService {
                 ));
 
         if (user.getStatus() == UserStatus.WITHDRAWN) {
-            throw new IllegalArgumentException("탈퇴한 회원은 로그인할 수 없습니다.");
+            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN, "탈퇴한 회원은 로그인할 수 없습니다.");
         }
 
         if (adminUserService.isEffectivelySuspended(user)) {
-            throw new IllegalArgumentException("정지된 회원입니다.");
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED, "정지된 회원입니다.");
         }
 
         if (!verifyPassword(request.getPassword(), user.getPasswordHash())) {
@@ -100,10 +102,10 @@ public class UserService {
                 .or(() -> userRepository.findByEmail(email))
                 .map(user -> {
                     if (user.getStatus() == UserStatus.WITHDRAWN) {
-                        throw new IllegalArgumentException("탈퇴한 회원은 로그인할 수 없습니다.");
+                        throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN, "탈퇴한 회원은 로그인할 수 없습니다.");
                     }
                     if (adminUserService.isEffectivelySuspended(user)) {
-                        throw new IllegalArgumentException("정지된 회원입니다.");
+                        throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED, "정지된 회원입니다.");
                     }
                     String accessToken = jwtTokenProvider.generateToken(user.getEmail());
                     return LoginResponse.of("카카오 로그인이 완료되었습니다.", accessToken, user);
