@@ -21,11 +21,11 @@
 
 ## 팀 소개
 
-| | |                                              | |
-|:---:|:---:|:--------------------------------------------:|:---:|
-| **Backend** | **Backend** |             **Backend / AI 추천**              | **Frontend** |
-| [@yeonci](https://github.com/yeonci) | [@js133](https://github.com/js133) | [@oraorajajo](https://github.com/oraorajajo) | [@Woo0704](https://github.com/Woo0704) |
-| 회원 · 레시피 · 마이페이지 · 관리자 | 게시판 · 리뷰 · 나만의 냉장고 |                  추천· 자연어처리                   | 프론트엔드 전반 |
+|                                       | |                                              | |
+|:-------------------------------------:|:---:|:--------------------------------------------:|:---:|
+|              **Backend**              | **Backend** |               **Backend / AI**               | **Frontend** |
+| [@yeonci](https://github.com/yeon-ci) | [@js133](https://github.com/js133) | [@oraorajajo](https://github.com/oraorajojo) | [@Woo0704](https://github.com/Woo0704) |
+|        회원 · 레시피 · 마이페이지 · 관리자         | 게시판 · 리뷰 · 나만의 냉장고 |                  추천· 자연어처리                   | 프론트엔드 전반 |
 
 ### 🍳 3셰프 동시 비교 추천
 같은 재료를 입력해도 한식·중식·양식 3명의 셰프가 각자의 메뉴를 동시에 제안합니다. "재생성"이 아니라 "미세조정" — 마음에 안 들면 처음부터 다시 추천받는 대신, 조건(시간대·조리부담·제외 재료)만 바꿔서 다시 계산합니다.
